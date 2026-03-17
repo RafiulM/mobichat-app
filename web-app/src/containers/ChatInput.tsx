@@ -31,6 +31,8 @@ import {
   IconWorld,
   IconBrandChrome,
   IconUser,
+  IconMicrophone,
+  IconMicrophoneOff,
 } from '@tabler/icons-react'
 import { BotIcon } from 'lucide-react'
 import { useTranslation } from '@/i18n/react-i18next-compat'
@@ -89,6 +91,20 @@ import { useJanBrowserExtension } from '@/hooks/useJanBrowserExtension'
 import { PromptVisionModel } from '@/containers/PromptVisionModel'
 import { useAgentMode } from '@/hooks/useAgentMode'
 import { isOpenClawRunning } from '@/utils/openclaw'
+import { VoiceIndicator } from '@/components/VoiceIndicator'
+
+type SpeechModeProps = {
+  isVoiceModeActive: boolean
+  isOverlayOpen: boolean
+  toggleVoiceMode: () => void
+  setOverlayOpen: (open: boolean) => void
+  sttState: string
+  currentTranscript: string
+  ttsState: string
+  startListening: () => void
+  stopListening: () => void
+  stopSpeaking: () => void
+}
 
 type ChatInputProps = {
   className?: string
@@ -102,6 +118,7 @@ type ChatInputProps = {
   ) => void
   onStop?: () => void
   chatStatus?: ChatStatus
+  speechMode?: SpeechModeProps
 }
 
 const ChatInput = memo(function ChatInput({
@@ -111,6 +128,7 @@ const ChatInput = memo(function ChatInput({
   onSubmit,
   onStop,
   chatStatus,
+  speechMode,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isFocused, setIsFocused] = useState(false)
@@ -1544,7 +1562,11 @@ const ChatInput = memo(function ChatInput({
                 }
               }}
               onPaste={handlePaste}
-              placeholder={t('common:placeholder.chatInput')}
+              placeholder={
+                speechMode?.isVoiceModeActive && speechMode.sttState === 'listening' && speechMode.currentTranscript
+                  ? speechMode.currentTranscript
+                  : t('common:placeholder.chatInput')
+              }
               autoFocus
               spellCheck={spellCheckChatInput}
               data-gramm={spellCheckChatInput}
@@ -1900,6 +1922,41 @@ const ChatInput = memo(function ChatInput({
                     />
                   </div>
                 )}
+
+              {/* Voice mode mic button */}
+              {speechMode && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={speechMode.isVoiceModeActive ? 'default' : 'ghost'}
+                      size="icon-sm"
+                      className={cn(
+                        'rounded-full mr-1 mb-1',
+                        speechMode.isVoiceModeActive && 'bg-primary/10 hover:bg-primary/20'
+                      )}
+                      onClick={() => {
+                        speechMode.toggleVoiceMode()
+                        if (!speechMode.isVoiceModeActive) {
+                          speechMode.setOverlayOpen(true)
+                        }
+                      }}
+                    >
+                      {speechMode.isVoiceModeActive ? (
+                        speechMode.sttState === 'listening' ? (
+                          <VoiceIndicator state="listening" className="scale-75" />
+                        ) : (
+                          <IconMicrophoneOff size={18} className="text-primary" />
+                        )
+                      ) : (
+                        <IconMicrophone size={18} className="text-muted-foreground" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{speechMode.isVoiceModeActive ? 'Disable voice mode' : 'Voice mode'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
               {isStreaming ? (
                 <Button

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stop-tts-server"
+description = "Enables the stop_tts_server command without any pre-configured scope."
+commands.allow = ["stop_tts_server"]
+
+[[permission]]
+identifier = "deny-stop-tts-server"
+description = "Denies the stop_tts_server command without any pre-configured scope."
+commands.deny = ["stop_tts_server"]

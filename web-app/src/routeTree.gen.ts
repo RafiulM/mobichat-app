@@ -14,6 +14,7 @@ import { Route as LogsRouteImport } from './routes/logs'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HubIndexRouteImport } from './routes/hub/index'
 import { Route as ThreadsThreadIdRouteImport } from './routes/threads/$threadId'
+import { Route as SettingsSpeechRouteImport } from './routes/settings/speech'
 import { Route as SettingsShortcutsRouteImport } from './routes/settings/shortcuts'
 import { Route as SettingsRemoteAccessRouteImport } from './routes/settings/remote-access'
 import { Route as SettingsPrivacyRouteImport } from './routes/settings/privacy'
@@ -56,6 +57,11 @@ const HubIndexRoute = HubIndexRouteImport.update({
 const ThreadsThreadIdRoute = ThreadsThreadIdRouteImport.update({
   id: '/threads/$threadId',
   path: '/threads/$threadId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsSpeechRoute = SettingsSpeechRouteImport.update({
+  id: '/settings/speech',
+  path: '/settings/speech',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsShortcutsRoute = SettingsShortcutsRouteImport.update({
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/remote-access': typeof SettingsRemoteAccessRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/speech': typeof SettingsSpeechRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/hub/': typeof HubIndexRoute
   '/settings/providers/$providerName': typeof SettingsProvidersProviderNameRoute
@@ -195,6 +202,7 @@ export interface FileRoutesByTo {
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/remote-access': typeof SettingsRemoteAccessRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/speech': typeof SettingsSpeechRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/hub': typeof HubIndexRoute
   '/settings/providers/$providerName': typeof SettingsProvidersProviderNameRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/remote-access': typeof SettingsRemoteAccessRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/speech': typeof SettingsSpeechRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/hub/': typeof HubIndexRoute
   '/settings/providers/$providerName': typeof SettingsProvidersProviderNameRoute
@@ -248,6 +257,7 @@ export interface FileRouteTypes {
     | '/settings/privacy'
     | '/settings/remote-access'
     | '/settings/shortcuts'
+    | '/settings/speech'
     | '/threads/$threadId'
     | '/hub/'
     | '/settings/providers/$providerName'
@@ -273,6 +283,7 @@ export interface FileRouteTypes {
     | '/settings/privacy'
     | '/settings/remote-access'
     | '/settings/shortcuts'
+    | '/settings/speech'
     | '/threads/$threadId'
     | '/hub'
     | '/settings/providers/$providerName'
@@ -298,6 +309,7 @@ export interface FileRouteTypes {
     | '/settings/privacy'
     | '/settings/remote-access'
     | '/settings/shortcuts'
+    | '/settings/speech'
     | '/threads/$threadId'
     | '/hub/'
     | '/settings/providers/$providerName'
@@ -324,6 +336,7 @@ export interface RootRouteChildren {
   SettingsPrivacyRoute: typeof SettingsPrivacyRoute
   SettingsRemoteAccessRoute: typeof SettingsRemoteAccessRoute
   SettingsShortcutsRoute: typeof SettingsShortcutsRoute
+  SettingsSpeechRoute: typeof SettingsSpeechRoute
   ThreadsThreadIdRoute: typeof ThreadsThreadIdRoute
   HubIndexRoute: typeof HubIndexRoute
   SettingsProvidersProviderNameRoute: typeof SettingsProvidersProviderNameRoute
@@ -365,6 +378,13 @@ declare module '@tanstack/react-router' {
       path: '/threads/$threadId'
       fullPath: '/threads/$threadId'
       preLoaderRoute: typeof ThreadsThreadIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/speech': {
+      id: '/settings/speech'
+      path: '/settings/speech'
+      fullPath: '/settings/speech'
+      preLoaderRoute: typeof SettingsSpeechRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/shortcuts': {
@@ -516,6 +536,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsPrivacyRoute: SettingsPrivacyRoute,
   SettingsRemoteAccessRoute: SettingsRemoteAccessRoute,
   SettingsShortcutsRoute: SettingsShortcutsRoute,
+  SettingsSpeechRoute: SettingsSpeechRoute,
   ThreadsThreadIdRoute: ThreadsThreadIdRoute,
   HubIndexRoute: HubIndexRoute,
   SettingsProvidersProviderNameRoute: SettingsProvidersProviderNameRoute,

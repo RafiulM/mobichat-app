@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-start-native-stt"
+description = "Enables the start_native_stt command without any pre-configured scope."
+commands.allow = ["start_native_stt"]
+
+[[permission]]
+identifier = "deny-start-native-stt"
+description = "Denies the start_native_stt command without any pre-configured scope."
+commands.deny = ["start_native_stt"]

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stop-native-stt"
+description = "Enables the stop_native_stt command without any pre-configured scope."
+commands.allow = ["stop_native_stt"]
+
+[[permission]]
+identifier = "deny-stop-native-stt"
+description = "Denies the stop_native_stt command without any pre-configured scope."
+commands.deny = ["stop_native_stt"]

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-request-microphone-via-helper"
+description = "Enables the request_microphone_via_helper command without any pre-configured scope."
+commands.allow = ["request_microphone_via_helper"]
+
+[[permission]]
+identifier = "deny-request-microphone-via-helper"
+description = "Denies the request_microphone_via_helper command without any pre-configured scope."
+commands.deny = ["request_microphone_via_helper"]

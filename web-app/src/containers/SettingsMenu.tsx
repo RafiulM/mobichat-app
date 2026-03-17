@@ -135,6 +135,12 @@ const SettingsMenu = () => {
       isEnabled: true,
     },
     {
+      title: 'common:speech',
+      route: route.settings.speech,
+      hasSubMenu: false,
+      isEnabled: true,
+    },
+    {
       title: 'common:mcp-servers',
       route: route.settings.mcp_servers,
       hasSubMenu: false,

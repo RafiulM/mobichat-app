@@ -54,6 +54,9 @@ import { ExtensionTypeEnum, VectorDBExtension } from '@janhq/core'
 import { ExtensionManager } from '@/lib/extension'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { useAgentMode } from '@/hooks/useAgentMode'
+import { useSpeechMode } from '@/hooks/useSpeechMode'
+import { VoiceOverlay } from '@/components/VoiceOverlay'
+import SpeechModeToggle from '@/containers/SpeechModeToggle'
 
 const CHAT_STATUS = {
   STREAMING: 'streaming',
@@ -826,11 +829,35 @@ function ThreadDetail() {
     [searchThreadModel, thread]
   )
 
+  // ── Speech / Voice mode ──────────────────────────────────────────────
+  const speechMode = useSpeechMode({
+    threadId,
+    chatMessages,
+    chatStatus: status,
+    onSubmit: (transcript) => processAndSendMessage(transcript),
+  })
+
+  const voiceMessages = useMemo(
+    () =>
+      chatMessages
+        .map((msg) => ({
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant',
+          text: msg.parts
+            .filter((p) => p.type === 'text')
+            .map((p) => (p as { type: 'text'; text: string }).text)
+            .join(''),
+        }))
+        .filter((m) => m.text),
+    [chatMessages]
+  )
+
   return (
     <div className="flex flex-col h-[calc(100dvh-(env(safe-area-inset-bottom)+env(safe-area-inset-top)))]">
       <HeaderPage>
         <div className="flex items-center justify-between w-full pr-2">
           <DropdownModelProvider model={threadModel} />
+          <SpeechModeToggle />
         </div>
       </HeaderPage>
       <div className="flex flex-1 flex-col h-full overflow-hidden">
@@ -854,6 +881,8 @@ function ThreadDetail() {
                     onRegenerate={handleRegenerate}
                     onEdit={handleEditMessage}
                     onDelete={handleDeleteMessage}
+                    onSpeak={speechMode.speakMessage}
+                    onStopSpeaking={speechMode.stopSpeaking}
                     isAnimating={!pendingContinueMessage}
                     hideActions={!!pendingContinueMessage}
                   />
@@ -929,9 +958,23 @@ function ThreadDetail() {
             onSubmit={handleSubmit}
             onStop={stop}
             chatStatus={status}
+            speechMode={speechMode}
           />
         </div>
       </div>
+
+      <VoiceOverlay
+        isOpen={speechMode.isOverlayOpen}
+        onClose={() => speechMode.setOverlayOpen(false)}
+        sttState={speechMode.sttState}
+        sttError={speechMode.sttError}
+        isSttSupported={speechMode.isSttSupported}
+        ttsState={speechMode.ttsState}
+        chatStatus={status}
+        currentTranscript={speechMode.currentTranscript}
+        messages={voiceMessages}
+        onInterrupt={speechMode.stopSpeaking}
+      />
     </div>
   )
 }

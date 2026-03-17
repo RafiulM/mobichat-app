@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-get-tts-port"
+description = "Enables the get_tts_port command without any pre-configured scope."
+commands.allow = ["get_tts_port"]
+
+[[permission]]
+identifier = "deny-get-tts-port"
+description = "Denies the get_tts_port command without any pre-configured scope."
+commands.deny = ["get_tts_port"]

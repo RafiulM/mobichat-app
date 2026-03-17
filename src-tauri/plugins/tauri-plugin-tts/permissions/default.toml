@@ -1,0 +1,18 @@
+[default]
+description = "Default permissions for the TTS plugin"
+permissions = [
+    "allow-start-tts-server",
+    "allow-stop-tts-server",
+    "allow-get-tts-port",
+    "allow-is-tts-running",
+    "allow-request-microphone-permission",
+    "allow-get-microphone-status",
+    "allow-open-microphone-settings",
+    "allow-request-microphone-via-helper",
+    "allow-start-native-stt",
+    "allow-restart-native-stt",
+    "allow-stop-native-stt",
+    "allow-cancel-native-stt",
+    "allow-get-stt-authorization-status",
+    "allow-request-stt-authorization"
+]

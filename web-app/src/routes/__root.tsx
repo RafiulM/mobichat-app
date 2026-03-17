@@ -21,8 +21,10 @@ import ToolApproval from '@/containers/dialogs/ToolApproval'
 import { TranslationProvider } from '@/i18n/TranslationContext'
 import OutOfContextPromiseModal from '@/containers/dialogs/OutOfContextDialog'
 import AttachmentIngestionDialog from '@/containers/dialogs/AttachmentIngestionDialog'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import GlobalError from '@/containers/GlobalError'
+import { invoke } from '@tauri-apps/api/core'
+import { useSpeechStore } from '@/stores/speech-store'
 import { GlobalEventHandler } from '@/providers/GlobalEventHandler'
 import { ServiceHubProvider } from '@/providers/ServiceHubProvider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -121,6 +123,31 @@ function RootLayout() {
     const timer = setTimeout(hideLoader, 200)
 
     return () => clearTimeout(timer)
+  }, [])
+
+  // Auto-start TTS server on app launch so voice mode is ready immediately
+  const ttsInitRef = useRef(false)
+  useEffect(() => {
+    if (ttsInitRef.current) return
+    ttsInitRef.current = true
+
+    ;(async () => {
+      try {
+        const running = await invoke<boolean>('plugin:tts|is_tts_running')
+        let port: number
+        if (running) {
+          port = await invoke<number>('plugin:tts|get_tts_port')
+        } else {
+          const result = await invoke<{ port: number; pid: number }>(
+            'plugin:tts|start_tts_server'
+          )
+          port = result.port
+        }
+        useSpeechStore.getState().setTtsServerPort(port)
+      } catch (err) {
+        console.warn('[TTS] Auto-start failed (will retry when needed):', err)
+      }
+    })()
   }, [])
 
   const IS_LOGS_ROUTE = getInitialLayoutType()

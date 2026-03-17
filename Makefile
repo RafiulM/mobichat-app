@@ -56,6 +56,33 @@ dev: install-and-build
 	make build-cli-dev
 	yarn dev
 
+# Dev with .app bundle — enables microphone access on macOS Sequoia.
+# macOS TCC requires a proper .app bundle for the mic permission dialog.
+# Use this instead of `make dev` when you need microphone/voice features.
+dev-app: install-and-build
+	yarn download:bin
+	make build-mlx-server-if-exists
+	make build-cli-dev
+	@echo "Building frontend..."
+	cd web-app && IS_TAURI=true TAURI_ENV_PLATFORM=darwin yarn build
+	@echo "Building Tauri binary..."
+	cd src-tauri && cargo build
+	@echo "Creating .app bundle..."
+	@mkdir -p src-tauri/target/debug/Jan.app/Contents/MacOS
+	@cp src-tauri/target/debug/Jan src-tauri/target/debug/Jan.app/Contents/MacOS/Jan
+	@cp src-tauri/Info.plist src-tauri/target/debug/Jan.app/Contents/Info.plist
+	@/usr/libexec/PlistBuddy -c "Delete :CFBundleExecutable" src-tauri/target/debug/Jan.app/Contents/Info.plist 2>/dev/null; true
+	@/usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string Jan" src-tauri/target/debug/Jan.app/Contents/Info.plist
+	@/usr/libexec/PlistBuddy -c "Delete :CFBundleName" src-tauri/target/debug/Jan.app/Contents/Info.plist 2>/dev/null; true
+	@/usr/libexec/PlistBuddy -c "Add :CFBundleName string Jan" src-tauri/target/debug/Jan.app/Contents/Info.plist
+	@# Link resources into the bundle so Tauri's resource_dir()/resources/ finds them
+	@mkdir -p src-tauri/target/debug/Jan.app/Contents/Resources
+	@rm -f src-tauri/target/debug/Jan.app/Contents/Resources/resources
+	@ln -sf ../../../resources src-tauri/target/debug/Jan.app/Contents/Resources/resources
+	@codesign --force --sign - --entitlements src-tauri/Entitlements.plist src-tauri/target/debug/Jan.app 2>/dev/null || true
+	@echo "Launching Jan.app..."
+	open src-tauri/target/debug/Jan.app
+
 # Web application targets
 install-web-app:
 	yarn install
