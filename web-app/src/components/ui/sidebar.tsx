@@ -290,7 +290,7 @@ const Sidebar = React.forwardRef<
 						"group-data-[collapsible=offcanvas]:w-0",
 						"group-data-[side=right]:rotate-180",
 						variant === "floating" || variant === "inset"
-							? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
+							? "group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
 							: "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
 						//* set duration to 0 for all elements when dragging
 						"group-data-[dragging=true]:duration-0! group-data-[dragging=true]_*:duration-0!",
@@ -304,7 +304,7 @@ const Sidebar = React.forwardRef<
 							: "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
 						// Adjust the padding for floating and inset variants.
 						variant === "floating" || variant === "inset"
-							? "p-2 pr-0 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
+							? "pr-0 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+2px)]"
 							: "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
 						//* set duration to 0 for all elements when dragging
 						"group-data-[dragging=true]:duration-0! group-data-[dragging=true]_*:duration-0!",
@@ -314,7 +314,7 @@ const Sidebar = React.forwardRef<
 				>
 					<div
 						data-sidebar="sidebar"
-						className="flex bg-clip-padding h-full w-full flex-col bg-linear-to-b from-sidebar dark:from-sidebar/70 to-background group-data-[variant=floating]:rounded-xl group-data-[variant=floating]:shadow group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border"
+						className="flex bg-clip-padding h-full w-full flex-col bg-linear-to-b from-sidebar dark:from-sidebar/70 to-background group-data-[variant=floating]:rounded-r-xl group-data-[variant=floating]:shadow group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:border-l-0"
 					>
 						{children}
 					</div>

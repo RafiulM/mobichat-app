@@ -148,7 +148,7 @@ const ThreadItem = memo(
           : 
           <SidebarMenuButton asChild>
             <Link to="/threads/$threadId" params={{ threadId: thread.id }}>
-              <span>{thread.title || t('common:newThread')}</span>
+              <span className="text-[13px]">{thread.title || t('common:newThread')}</span>
             </Link>
           </SidebarMenuButton>
         }

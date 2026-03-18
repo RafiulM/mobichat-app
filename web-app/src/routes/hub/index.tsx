@@ -49,7 +49,9 @@ import { ModelDownloadAction } from '@/containers/ModelDownloadAction'
 import { MlxModelDownloadAction } from '@/containers/MlxModelDownloadAction'
 import { DEFAULT_MODEL_QUANTIZATIONS } from '@/constants/models'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { RenderMarkdown } from '@/containers/RenderMarkdown'
+import { toast } from 'sonner'
 
 type SearchParams = {
   repo: string
@@ -65,8 +67,9 @@ export const Route = createFileRoute(route.hub.index as any)({
 function HubContent() {
   const [isPending, startTransition] = useTransition()
   const parentRef = useRef(null)
-  const huggingfaceToken = useGeneralSetting((state) => state.huggingfaceToken)
+  const { huggingfaceToken, setHuggingfaceToken } = useGeneralSetting()
   const serviceHub = useServiceHub()
+  const [isValidatingToken, setIsValidatingToken] = useState(false)
 
   const { t } = useTranslation()
 
@@ -438,6 +441,62 @@ function HubContent() {
         </HeaderPage>
         <div ref={parentRef} className="p-4 w-full h-[calc(100%-60px)] overflow-y-auto! first-step-setup-local-provider">
           <div className="flex flex-col h-full justify-between gap-4 gap-y-3 w-full md:w-4/5 xl:w-4/6 mx-auto">
+            {/* HuggingFace Token */}
+            <Card title={t('hub:huggingfaceToken') ?? 'HuggingFace Token'}>
+              <CardItem
+                title={t('hub:huggingfaceTokenDesc') ?? 'Your HuggingFace API token for accessing gated models.'}
+                actions={
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="hf-token"
+                      value={huggingfaceToken || ''}
+                      onChange={(e) => setHuggingfaceToken(e.target.value)}
+                      placeholder="hf_xxx_xxx"
+                      required
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isValidatingToken}
+                      onClick={async () => {
+                        const token = (huggingfaceToken || '').trim()
+                        if (!token) {
+                          toast.error('Please enter a HuggingFace token to validate')
+                          return
+                        }
+                        setIsValidatingToken(true)
+                        const controller = new AbortController()
+                        const timeoutId = setTimeout(() => controller.abort(), 10_000)
+                        try {
+                          const resp = await fetch('https://huggingface.co/api/whoami-v2', {
+                            headers: { Authorization: `Bearer ${token}` },
+                            signal: controller.signal,
+                          })
+                          if (resp.ok) {
+                            const data = await resp.json()
+                            toast.success('Token is valid', {
+                              description: data?.name ? `Signed in as ${data.name}` : 'Your HuggingFace token is valid.',
+                            })
+                          } else {
+                            toast.error('Token invalid', {
+                              description: 'The provided HuggingFace token is invalid.',
+                            })
+                          }
+                        } catch (e) {
+                          const name = (e as { name?: string })?.name
+                          toast.error(name === 'AbortError' ? 'Validation timed out' : 'Validation failed')
+                        } finally {
+                          clearTimeout(timeoutId)
+                          setIsValidatingToken(false)
+                        }
+                      }}
+                    >
+                      Verify
+                    </Button>
+                  </div>
+                }
+              />
+            </Card>
             {/* Show skeleton immediately on navigation, then show actual content when loaded */}
             {(isInitialLoad || (loading && !filteredModels.length)) ? (
               // Skeleton loading state for better perceived performance

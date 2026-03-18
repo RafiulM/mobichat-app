@@ -1,12 +1,13 @@
 import { DownloadManagement } from '@/containers/DownloadManegement'
 import { NavChats } from './NavChats'
 import { NavMain } from './NavMain'
-import { NavProjects } from './NavProjects'
+import { NavUser } from './NavUser'
 import { useLeftPanel } from '@/hooks/useLeftPanel'
 
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarTrigger,
   SidebarHeader,
   SidebarRail,
@@ -29,9 +30,11 @@ export function LeftSidebar() {
           <NavMain />
         </SidebarHeader>
         <SidebarContent className="mask-b-from-95% mask-t-from-98%">
-          <NavProjects />
           <NavChats />
         </SidebarContent>
+        <SidebarFooter className="px-2 pb-2">
+          <NavUser />
+        </SidebarFooter>
         <SidebarRail />
       </Sidebar>
     </div>

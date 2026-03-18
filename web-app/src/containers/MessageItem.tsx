@@ -18,13 +18,14 @@ import {
 } from '@/components/ai-elements/tool'
 import { CopyButton } from './CopyButton'
 import { useModelProvider } from '@/hooks/useModelProvider'
-import { IconRefresh, IconPaperclip } from '@tabler/icons-react'
+import { IconRefresh, IconPaperclip, IconVolume, IconPlayerStop } from '@tabler/icons-react'
 import { EditMessageDialog } from '@/containers/dialogs/EditMessageDialog'
 import { DeleteMessageDialog } from '@/containers/dialogs/DeleteMessageDialog'
 import TokenSpeedIndicator from '@/containers/TokenSpeedIndicator'
 import { extractFilesFromPrompt, FileMetadata } from '@/lib/fileMetadata'
 import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
+import { useSpeechStore } from '@/stores/speech-store'
 
 const CHAT_STATUS = {
   STREAMING: 'streaming',
@@ -46,6 +47,8 @@ export type MessageItemProps = {
   onRegenerate?: (messageId: string) => void
   onEdit?: (messageId: string, newText: string) => void
   onDelete?: (messageId: string) => void
+  onSpeak?: (text: string, messageId: string) => void
+  onStopSpeaking?: () => void
   assistant?: { avatar?: React.ReactNode; name?: string }
   showAssistant?: boolean
   isAnimating?: boolean
@@ -63,6 +66,8 @@ export const MessageItem = memo(
     onRegenerate,
     onEdit,
     onDelete,
+    onSpeak,
+    onStopSpeaking,
   }: MessageItemProps) => {
     const selectedModel = useModelProvider((state) => state.selectedModel)
     const [previewImage, setPreviewImage] = useState<{
@@ -70,6 +75,24 @@ export const MessageItem = memo(
       filename?: string
     } | null>(null)
 
+    // Speech / TTS state for per-message speaker button
+    const speakingMessageId = useSpeechStore((s) => s.speakingMessageId)
+    const ttsState = useSpeechStore((s) => s.ttsState)
+    const isSpeakingThisMessage =
+      speakingMessageId === message.id && ttsState === 'speaking'
+
+    const handleSpeak = useCallback(() => {
+      const text = message.parts
+        .filter(
+          (part): part is { type: 'text'; text: string } =>
+            part.type === 'text'
+        )
+        .map((part) => part.text)
+        .join('\n')
+      if (text.trim() && onSpeak) {
+        onSpeak(text, message.id)
+      }
+    }, [message.parts, message.id, onSpeak])
 
     const handleRegenerate = useCallback(() => {
       onRegenerate?.(message.id)
@@ -379,15 +402,19 @@ export const MessageItem = memo(
               >
                 <CopyButton text={getFullTextContent()} />
 
-                {onEdit && !isStreaming && (
-                  <EditMessageDialog
-                    message={getFullTextContent()}
-                    onSave={handleEdit}
-                  />
-                )}
-
-                {onDelete && !isStreaming && (
-                  <DeleteMessageDialog onDelete={handleDelete} />
+                {onSpeak && getFullTextContent().trim() && !isStreaming && (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={isSpeakingThisMessage ? onStopSpeaking : handleSpeak}
+                    title={isSpeakingThisMessage ? 'Stop speaking' : 'Read aloud'}
+                  >
+                    {isSpeakingThisMessage ? (
+                      <IconPlayerStop size={16} className="text-primary" />
+                    ) : (
+                      <IconVolume size={16} />
+                    )}
+                  </Button>
                 )}
 
                 {selectedModel && onRegenerate && !isStreaming && isLastMessage && (

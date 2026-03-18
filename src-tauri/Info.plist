@@ -4,6 +4,10 @@
 <dict>
   <key>CFBundleIdentifier</key>
   <string>jan.ai.app</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Jan needs microphone access for voice input and speech-to-text.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Jan needs speech recognition access for real-time voice-to-text input.</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

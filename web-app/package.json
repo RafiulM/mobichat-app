@@ -1,5 +1,5 @@
 {
-  "name": "@janhq/web-app",
+  "name": "@mobichat/web-app",
   "private": true,
   "version": "0.7.6",
   "type": "module",

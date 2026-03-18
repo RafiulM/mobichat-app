@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Jan",
+  "productName": "MobiChat",
   "version": "0.6.599",
-  "identifier": "jan.ai.app",
+  "identifier": "com.mobichat.app",
   "build": {
     "frontendDist": "../web-app/dist",
     "devUrl": "http://localhost:1420",

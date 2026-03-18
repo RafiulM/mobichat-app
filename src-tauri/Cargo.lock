@@ -3,7 +3,7 @@
 version = 3
 
 [[package]]
-name = "Jan"
+name = "MobiChat"
 version = "0.6.599"
 dependencies = [
  "async-trait",
@@ -58,6 +58,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
+ "tauri-plugin-tts",
  "tauri-plugin-updater",
  "tauri-plugin-vector-db",
  "tempfile",
@@ -6818,6 +6819,24 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "tauri-plugin-tts"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "dirs",
+ "jan-utils",
+ "log",
+ "nix",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.17",
+ "tokio",
 ]
 
 [[package]]

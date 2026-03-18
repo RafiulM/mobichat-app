@@ -76,6 +76,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@janhq/tauri-plugin-tts-api@workspace:tauri-plugin-tts":
+  version: 0.0.0-use.local
+  resolution: "@janhq/tauri-plugin-tts-api@workspace:tauri-plugin-tts"
+  dependencies:
+    "@rollup/plugin-typescript": "npm:^12.0.0"
+    "@tauri-apps/api": "npm:>=2.0.0-beta.6"
+    rollup: "npm:^4.9.6"
+    tslib: "npm:^2.6.2"
+    typescript: "npm:^5.3.3"
+  languageName: unknown
+  linkType: soft
+
 "@janhq/tauri-plugin-vector-db-api@workspace:tauri-plugin-vector-db":
   version: 0.0.0-use.local
   resolution: "@janhq/tauri-plugin-vector-db-api@workspace:tauri-plugin-vector-db"

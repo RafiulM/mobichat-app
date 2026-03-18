@@ -24,7 +24,7 @@ import { predefinedProviders } from '@/constants/providers'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { getLastUsedModel } from '@/utils/getModelToStart'
 import { syncModelToOpenClaw } from '@/utils/openclaw'
-import { ChevronsUpDown } from 'lucide-react'
+import { ChevronsUpDown, ChevronDown } from 'lucide-react'
 import { useAgentMode } from '@/hooks/useAgentMode'
 import { BotIcon } from 'lucide-react'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
@@ -32,7 +32,8 @@ import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 type DropdownModelProviderProps = {
   model?: ThreadModel
   useLastUsedModel?: boolean
-  projectId?: string 
+  projectId?: string
+  minimal?: boolean
 }
 
 interface SearchableModel {
@@ -59,6 +60,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
   model,
   projectId,
   useLastUsedModel = false,
+  minimal = false,
 }: DropdownModelProviderProps) {
   const {
     providers,
@@ -350,10 +352,19 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
     const groups: Record<string, SearchableModel[]> = {}
 
     if (!searchValue) {
-      // When not searching, show all active providers (even without models)
+      // When not searching, show only providers that have usable models
       // Sort: local first, then providers with API keys or custom with models, then others, alphabetically
       const activeProviders = providers
-        .filter((p) => p.active)
+        .filter((p) => {
+          if (!p.active) return false
+          // Only show providers that have models available
+          const isPredefined = predefinedProviders.some((e) =>
+            e.provider.includes(p.provider)
+          )
+          if (isPredefined && p.provider !== 'llamacpp' && p.provider !== 'mlx' && !p.api_key?.length) return false
+          if (p.models.length === 0) return false
+          return true
+        })
         .sort((a, b) => {
           const aIsLocal = a.provider === 'llamacpp' || a.provider === 'mlx'
           const bIsLocal = b.provider === 'llamacpp' || b.provider === 'mlx'
@@ -503,27 +514,35 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>
-          <div className="border relative z-20 px-4 py-1.5 flex items-center gap-1.5 rounded-full">
+          <div className={cn(
+            "relative z-20 flex items-center gap-1.5",
+            minimal ? "px-1 py-1" : "border px-4 py-1.5 rounded-full"
+          )}>
             <button
               type="button"
               className="font-medium cursor-pointer flex items-center gap-1.5 relative z-20 max-w-50"
             >
-              {provider && (
+              {!minimal && provider && (
                 <div className="shrink-0">
                   <ProvidersAvatar provider={provider} />
                 </div>
               )}
               <span
                 className={cn(
-                  'text-foreground truncate leading-normal',
+                  'truncate leading-normal',
+                  minimal ? 'text-sm text-muted-foreground' : 'text-foreground',
                   !selectedModel?.id && 'text-muted-foreground'
                 )}
               >
                 {displayModel}
               </span>
-              <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+              {minimal ? (
+                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+              )}
             </button>
-          {currentModel?.settings &&
+          {!minimal && currentModel?.settings &&
             provider &&
             provider.provider === 'llamacpp' && (
               <div onClick={(e) => e.stopPropagation()}>
@@ -533,12 +552,14 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
                 />
               </div>
             )}
-          <ModelSupportStatus
-            modelId={selectedModel?.id}
-            provider={selectedProvider}
-            contextSize={getContextSize()}
-            className="ml-0.5 shrink-0"
-          />
+          {!minimal && (
+            <ModelSupportStatus
+              modelId={selectedModel?.id}
+              provider={selectedProvider}
+              contextSize={getContextSize()}
+              className="ml-0.5 shrink-0"
+            />
+          )}
         </div>
         </PopoverTrigger>
 

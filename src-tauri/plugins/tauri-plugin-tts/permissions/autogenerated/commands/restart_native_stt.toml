@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-restart-native-stt"
+description = "Enables the restart_native_stt command without any pre-configured scope."
+commands.allow = ["restart_native_stt"]
+
+[[permission]]
+identifier = "deny-restart-native-stt"
+description = "Denies the restart_native_stt command without any pre-configured scope."
+commands.deny = ["restart_native_stt"]

@@ -57,6 +57,11 @@ pub fn run() {
         app_builder = app_builder.plugin(tauri_plugin_mlx::init());
     }
 
+    #[cfg(feature = "tts")]
+    {
+        app_builder = app_builder.plugin(tauri_plugin_tts::init());
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         app_builder = app_builder.plugin(tauri_plugin_hardware::init());
@@ -454,6 +459,16 @@ pub fn run() {
                             log::warn!("Failed to cleanup MLX processes: {}", e);
                         } else {
                             log::info!("MLX processes cleaned up successfully");
+                        }
+                    }
+
+                    #[cfg(feature = "tts")]
+                    {
+                        use tauri_plugin_tts::cleanup_tts_process;
+                        if let Err(e) = cleanup_tts_process(app_handle.clone()).await {
+                            log::warn!("Failed to cleanup TTS process: {}", e);
+                        } else {
+                            log::info!("TTS process cleaned up successfully");
                         }
                     }
 

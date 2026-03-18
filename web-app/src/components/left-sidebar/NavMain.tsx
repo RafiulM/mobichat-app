@@ -6,11 +6,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
-import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 
 import { Link, useNavigate } from '@tanstack/react-router'
-import { PlatformMetaKey } from '@/containers/PlatformMetaKey'
 import React, { useEffect, useRef } from 'react'
 import {
   SearchIcon,
@@ -76,53 +74,21 @@ const getNavMainItems = (
     title: 'common:newChat',
     animatedIcon: MessageCircleIcon,
     onClick: onNewChat,
-    shortcut: (
-      <KbdGroup className="ml-auto scale-90 gap-0">
-        <Kbd className="bg-transparent size-3">
-          <PlatformMetaKey />
-        </Kbd>
-        <Kbd className="bg-transparent size-3">N</Kbd>
-      </KbdGroup>
-    ),
   },
   {
     title: 'common:newAgentChat',
     animatedIcon: BotIcon,
     onClick: onJanClaw,
-    shortcut: (
-      <KbdGroup className="ml-auto scale-90 gap-0">
-        <Kbd className="bg-transparent size-3">
-          <PlatformMetaKey />
-        </Kbd>
-        <Kbd className="bg-transparent size-3">M</Kbd>
-      </KbdGroup>
-    ),
   },
   {
     title: 'common:projects.new',
     animatedIcon: FolderPlusIcon,
     onClick: onNewProject,
-    shortcut: (
-      <KbdGroup className="ml-auto scale-90 gap-0">
-        <Kbd className="bg-transparent size-3">
-          <PlatformMetaKey />
-        </Kbd>
-        <Kbd className="bg-transparent size-3">L</Kbd>
-      </KbdGroup>
-    ),
   },
   {
     title: 'common:search',
     animatedIcon: SearchIcon,
     onClick: onSearch,
-    shortcut: (
-      <KbdGroup className="ml-auto scale-90 gap-0">
-        <Kbd className="bg-transparent size-3">
-          <PlatformMetaKey />
-        </Kbd>
-        <Kbd className="bg-transparent size-3">K</Kbd>
-      </KbdGroup>
-    ),
   },
   {
     title: 'common:hub',
