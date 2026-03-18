@@ -13,5 +13,7 @@
   "useModel": "Use this model",
   "downloadModel": "Download model",
   "tools": "Tools",
-  "searchPlaceholder": "Search for models on Hugging Face..."
+  "searchPlaceholder": "Search for models on Hugging Face...",
+  "huggingfaceToken": "HuggingFace Token",
+  "huggingfaceTokenDesc": "Your HuggingFace API token for accessing gated models."
 }

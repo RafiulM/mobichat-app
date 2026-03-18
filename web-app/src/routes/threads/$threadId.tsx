@@ -860,6 +860,7 @@ function ThreadDetail() {
           <SpeechModeToggle />
         </div>
       </HeaderPage>
+
       <div className="flex flex-1 flex-col h-full overflow-hidden">
         {/* Messages Area */}
         <div className="flex-1 relative">

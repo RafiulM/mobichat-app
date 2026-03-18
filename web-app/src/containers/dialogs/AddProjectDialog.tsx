@@ -6,22 +6,27 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
-import { useAssistant } from '@/hooks/useAssistant'
-import { AvatarEmoji } from '@/containers/AvatarEmoji'
 import { toast } from 'sonner'
 import { useTranslation } from '@/i18n/react-i18next-compat'
-import { ChevronDown, Plus } from 'lucide-react'
-import AddEditAssistant from './AddEditAssistant'
+import { cn } from '@/lib/utils'
+
+const PROJECT_COLORS = [
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#ef4444', // red
+  '#f97316', // orange
+  '#eab308', // yellow
+  '#22c55e', // green
+  '#14b8a6', // teal
+  '#06b6d4', // cyan
+  '#3b82f6', // blue
+  '#64748b', // slate
+  '#78716c', // stone
+]
 
 interface AddProjectDialogProps {
   open: boolean
@@ -32,6 +37,7 @@ interface AddProjectDialogProps {
     name: string
     updated_at: number
     assistantId?: string
+    color?: string
   }
   onSave: (name: string, assistantId?: string) => void
 }
@@ -45,17 +51,13 @@ export default function AddProjectDialog({
 }: AddProjectDialogProps) {
   const { t } = useTranslation()
   const [name, setName] = useState(initialData?.name || '')
-  const [selectedAssistantId, setSelectedAssistantId] = useState<string | undefined>(initialData?.assistantId)
+  const [selectedColor, setSelectedColor] = useState(initialData?.color || PROJECT_COLORS[0])
   const { folders } = useThreadManagement()
-  const { assistants, addAssistant } = useAssistant()
-  const [addAssistantDialogOpen, setAddAssistantDialogOpen] = useState(false)
-
-  const selectedAssistant = assistants.find((a) => a.id === selectedAssistantId)
 
   useEffect(() => {
     if (open) {
       setName(initialData?.name || '')
-      setSelectedAssistantId(initialData?.assistantId)
+      setSelectedColor(initialData?.color || PROJECT_COLORS[0])
     }
   }, [open, initialData])
 
@@ -76,7 +78,7 @@ export default function AddProjectDialog({
       return
     }
 
-    onSave(trimmedName, selectedAssistantId)
+    onSave(trimmedName)
 
     // Show success message
     if (editingKey) {
@@ -85,23 +87,22 @@ export default function AddProjectDialog({
       toast.success(t('projects.addProjectDialog.createSuccess', { projectName: trimmedName }))
     }
     setName('')
-    setSelectedAssistantId(undefined)
+    setSelectedColor(PROJECT_COLORS[0])
   }
 
   const handleCancel = () => {
     onOpenChange(false)
     setName('')
-    setSelectedAssistantId(undefined)
+    setSelectedColor(PROJECT_COLORS[0])
   }
 
   // Check if the button should be disabled
   const hasChanged = editingKey
-    ? name.trim() !== initialData?.name || selectedAssistantId !== initialData?.assistantId
+    ? name.trim() !== initialData?.name
     : true
   const isButtonDisabled = !name.trim() || (editingKey && !hasChanged)
 
   return (
-    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
@@ -125,70 +126,23 @@ export default function AddProjectDialog({
             />
           </div>
           <div>
-            <label className="text-sm font-medium mb-1.5 block">
-              {t('projects.addProjectDialog.assistant')}
+            <label className="text-sm font-medium mb-2 block">
+              Color
             </label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-between rounded-md"
-                >
-                  {selectedAssistant ? (
-                    <div className="flex items-center gap-2">
-                      {selectedAssistant.avatar && (
-                        <AvatarEmoji
-                          avatar={selectedAssistant.avatar}
-                          imageClassName="w-4 h-4 object-contain"
-                          textClassName="text-sm"
-                        />
-                      )}
-                      <span>{selectedAssistant.name}</span>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">
-                      {t('projects.addProjectDialog.selectAssistant')}
-                    </span>
+            <div className="flex flex-wrap gap-2">
+              {PROJECT_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={cn(
+                    'size-7 rounded-full cursor-pointer transition-all duration-150 ring-offset-2 ring-offset-background',
+                    selectedColor === color ? 'ring-2 ring-foreground scale-110' : 'hover:scale-105'
                   )}
-                  <ChevronDown className="size-4 text-muted-foreground" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width)">
-                <DropdownMenuItem
-                  onSelect={() => setSelectedAssistantId(undefined)}
-                >
-                  <span className="text-muted-foreground">
-                    {t('projects.addProjectDialog.noAssistant')}
-                  </span>
-                </DropdownMenuItem>
-                {assistants.map((assistant) => (
-                  <DropdownMenuItem
-                    key={assistant.id}
-                    onSelect={() => setSelectedAssistantId(assistant.id)}
-                  >
-                    <div className="flex items-center gap-2">
-                      {assistant.avatar && (
-                        <AvatarEmoji
-                          avatar={assistant.avatar}
-                          imageClassName="w-4 h-4 object-contain"
-                          textClassName="text-sm"
-                        />
-                      )}
-                      <span>{assistant.name}</span>
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => setAddAssistantDialogOpen(true)}
-                >
-                  <div className="flex items-center gap-2">
-                    <Plus className="size-4" />
-                    <span>{t('projects.addProjectDialog.addAssistant')}</span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  style={{ backgroundColor: color }}
+                  onClick={() => setSelectedColor(color)}
+                />
+              ))}
+            </div>
           </div>
         </div>
         <DialogFooter>
@@ -201,16 +155,5 @@ export default function AddProjectDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-
-    <AddEditAssistant
-      open={addAssistantDialogOpen}
-      onOpenChange={setAddAssistantDialogOpen}
-      editingKey={null}
-      onSave={(assistant) => {
-        addAssistant(assistant)
-        setSelectedAssistantId(assistant.id)
-      }}
-    />
-  </>
   )
 }

@@ -2,14 +2,11 @@
 import { createFileRoute, useSearch } from '@tanstack/react-router'
 import ChatInput from '@/containers/ChatInput'
 import HeaderPage from '@/containers/HeaderPage'
-import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useTools } from '@/hooks/useTools'
-import { cn } from '@/lib/utils'
+import { cn, getModelDisplayName, getProviderTitle } from '@/lib/utils'
 
 import { useModelProvider } from '@/hooks/useModelProvider'
-import SetupScreen from '@/containers/SetupScreen'
 import { route } from '@/constants/routes'
-import { predefinedProviders } from '@/constants/providers'
 
 type ThreadModel = {
   id: string
@@ -18,16 +15,27 @@ type ThreadModel = {
 
 type SearchParams = {
   threadModel?: ThreadModel
+  projectId?: string
 }
-import { useEffect } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useThreads } from '@/hooks/useThreads'
+import { useThreadManagement } from '@/hooks/useThreadManagement'
 import DropdownModelProvider from '@/containers/DropdownModelProvider'
+import { FolderIcon, X } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { useSpeechMode } from '@/hooks/useSpeechMode'
+import { VoiceOverlay } from '@/components/VoiceOverlay'
+import { TEMPORARY_CHAT_ID } from '@/constants/chat'
+import { usePrompt } from '@/hooks/usePrompt'
+
+const LOCAL_PROVIDERS = ['llamacpp', 'jan', 'mlx']
 
 export const Route = createFileRoute(route.home as any)({
   component: Index,
   validateSearch: (search: Record<string, unknown>): SearchParams => {
     const result: SearchParams = {
       threadModel: search.threadModel as ThreadModel | undefined,
+      projectId: search.projectId as string | undefined,
     }
 
     return result
@@ -35,48 +43,54 @@ export const Route = createFileRoute(route.home as any)({
 })
 
 function Index() {
-  const { t } = useTranslation()
-  const { providers } = useModelProvider()
+  const { selectedModel, selectedProvider } = useModelProvider()
   const search = useSearch({ from: route.home as any })
   const threadModel = search.threadModel
+  const projectId = search.projectId
   const { setCurrentThreadId } = useThreads()
+  const { getFolderById } = useThreadManagement()
+  const navigate = useNavigate()
   useTools()
 
-  // Conditional to check if there are any valid providers
-  // required min 1 api_key or 1 model in llama.cpp or jan provider
-  // Custom providers (not in predefinedProviders) don't require api_key but need models
-  const hasValidProviders = providers.some((provider) => {
-    const isPredefinedProvider = predefinedProviders.some(
-      (p) => p.provider === provider.provider
-    )
+  const setPrompt = usePrompt((state) => state.setPrompt)
 
-    // Custom providers don't need API key validation but must have models
-    if (!isPredefinedProvider) {
-      return provider.models.length > 0
-    }
-
-    // Predefined providers need either API key or models (for llamacpp/jan)
-    return (
-      provider.api_key?.length ||
-      (provider.provider === 'llamacpp' && provider.models.length) ||
-      (provider.provider === 'jan' && provider.models.length)
-    )
+  const speechMode = useSpeechMode({
+    threadId: TEMPORARY_CHAT_ID,
+    chatMessages: [],
+    chatStatus: 'ready',
+    onSubmit: useCallback(
+      (transcript: string) => {
+        setPrompt(transcript)
+      },
+      [setPrompt]
+    ),
   })
 
   useEffect(() => {
     setCurrentThreadId(undefined)
   }, [setCurrentThreadId])
 
-  if (!hasValidProviders) {
-    return <SetupScreen />
-  }
+  const project = useMemo(() => {
+    if (!projectId) return null
+    return getFolderById(projectId) ?? null
+  }, [projectId, getFolderById])
+
+  const modelSubtitle = useMemo(() => {
+    if (!selectedModel) return null
+    const parts: string[] = []
+    parts.push(getModelDisplayName(selectedModel))
+    if (LOCAL_PROVIDERS.includes(selectedProvider)) {
+      parts.push('Running locally')
+    } else {
+      parts.push(getProviderTitle(selectedProvider))
+    }
+    return parts.join(' \u00b7 ')
+  }, [selectedModel, selectedProvider])
 
   return (
     <div className="flex h-full flex-col justify-center">
       <HeaderPage>
-        <div className="flex items-center gap-2 w-full">
-          <DropdownModelProvider model={threadModel} />
-        </div>
+        <DropdownModelProvider model={threadModel} useLastUsedModel minimal />
       </HeaderPage>
       <div
         className={cn(
@@ -90,22 +104,57 @@ function Index() {
         >
           <div className={cn('text-center mb-4')}>
             <h1
-              className={cn(
-                'text-2xl mt-2 font-studio font-medium',
-              )}
+              className="text-5xl mt-2 font-medium leading-tight"
+              style={{ fontFamily: '"Instrument Serif", Georgia, serif' }}
             >
-              {t('chat:description')}
+              What can I help
+              <br />
+              you <span className="italic text-[#C4A882]">think</span> about?
             </h1>
+            {modelSubtitle && (
+              <p className="text-sm text-muted-foreground mt-3">
+                {modelSubtitle}
+              </p>
+            )}
           </div>
+          {project && (
+            <div className="flex items-center justify-center mb-3">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-sm text-foreground">
+                <FolderIcon className="size-3.5 text-muted-foreground" />
+                <span>{project.name}</span>
+                <button
+                  className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 cursor-pointer"
+                  onClick={() => navigate({ to: route.home })}
+                >
+                  <X className="size-3 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex-1 shrink-0">
             <ChatInput
               showSpeedToken={false}
               model={threadModel}
               initialMessage={true}
+              projectId={projectId}
+              speechMode={speechMode}
             />
           </div>
         </div>
       </div>
+
+      <VoiceOverlay
+        isOpen={speechMode.isOverlayOpen}
+        onClose={() => speechMode.setOverlayOpen(false)}
+        sttState={speechMode.sttState}
+        sttError={speechMode.sttError}
+        isSttSupported={speechMode.isSttSupported}
+        ttsState={speechMode.ttsState}
+        chatStatus="ready"
+        currentTranscript={speechMode.currentTranscript}
+        messages={[]}
+        onInterrupt={speechMode.stopSpeaking}
+      />
     </div>
   )
 }

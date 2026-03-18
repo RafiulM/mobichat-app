@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { invoke } from '@tauri-apps/api/core'
 import { route } from '@/constants/routes'
 import SettingsMenu from '@/containers/SettingsMenu'
 import HeaderPage from '@/containers/HeaderPage'
@@ -14,22 +13,17 @@ import ChangeDataFolderLocation from '@/containers/dialogs/ChangeDataFolderLocat
 import { FactoryResetDialog } from '@/containers/dialogs'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import {
-  IconBrandDiscord,
-  IconBrandGithub,
-  IconExternalLink,
   IconFolder,
-  IconLogs,
   IconCopy,
   IconCopyCheck,
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { isDev } from '@/lib/utils'
 import { SystemEvent } from '@/types/events'
-import { Input } from '@/components/ui/input'
 import { useHardware } from '@/hooks/useHardware'
 import LanguageSwitcher from '@/containers/LanguageSwitcher'
+import { ThemeSwitcher } from '@/containers/ThemeSwitcher'
 import { isRootDir } from '@/utils/path'
-const TOKEN_VALIDATION_TIMEOUT_MS = 10_000
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.settings.general as any)({
@@ -41,20 +35,9 @@ function General() {
   const {
     spellCheckChatInput,
     setSpellCheckChatInput,
-    huggingfaceToken,
-    setHuggingfaceToken,
   } = useGeneralSetting()
   const serviceHub = useServiceHub()
 
-  const openFileTitle = (): string => {
-    if (IS_MACOS) {
-      return t('settings:general.showInFinder')
-    } else if (IS_WINDOWS) {
-      return t('settings:general.showInFileExplorer')
-    } else {
-      return t('settings:general.openContainingFolder')
-    }
-  }
   const { checkForUpdate } = useAppUpdater()
   const { pausePolling } = useHardware()
   const [janDataFolder, setJanDataFolder] = useState<string | undefined>()
@@ -62,10 +45,6 @@ function General() {
   const [selectedNewPath, setSelectedNewPath] = useState<string | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
-  const [isValidatingToken, setIsValidatingToken] = useState(false)
-  const [cliInstalled, setCliInstalled] = useState<boolean | null>(null)
-  const [cliPath, setCliPath] = useState<string | null>(null)
-  const [isCliLoading, setIsCliLoading] = useState(false)
 
   useEffect(() => {
     const fetchDataFolder = async () => {
@@ -76,41 +55,6 @@ function General() {
     fetchDataFolder()
   }, [serviceHub])
 
-  useEffect(() => {
-    if (!IS_TAURI) return
-    invoke<{ installed: boolean; path: string | null }>('check_jan_cli_installed')
-      .then((s) => { setCliInstalled(s.installed); setCliPath(s.path) })
-      .catch(() => setCliInstalled(false))
-  }, [])
-
-  const handleInstallCli = async () => {
-    setIsCliLoading(true)
-    try {
-      const s = await invoke<{ installed: boolean; path: string | null }>('install_jan_cli')
-      setCliInstalled(s.installed)
-      setCliPath(s.path)
-      toast.success(`Jan CLI installed to ${s.path}`)
-    } catch (e) {
-      toast.error('Install failed', { description: String(e) })
-    } finally {
-      setIsCliLoading(false)
-    }
-  }
-
-  const handleUninstallCli = async () => {
-    setIsCliLoading(true)
-    try {
-      await invoke('uninstall_jan_cli')
-      setCliInstalled(false)
-      setCliPath(null)
-      toast.success('Jan CLI uninstalled')
-    } catch (e) {
-      toast.error('Uninstall failed', { description: String(e) })
-    } finally {
-      setIsCliLoading(false)
-    }
-  }
-
   const resetApp = async () => {
     // Prevent resetting if data folder is root directory
     if (isRootDir(janDataFolder ?? '/')) {
@@ -118,23 +62,14 @@ function General() {
       return
     }
     pausePolling()
-    // TODO: Loading indicator
     await serviceHub.app().factoryReset()
-  }
-
-  const handleOpenLogs = async () => {
-    try {
-      await serviceHub.window().openLogsWindow()
-    } catch (error) {
-      console.error('Failed to open logs window:', error)
-    }
   }
 
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
       setIsCopied(true)
-      setTimeout(() => setIsCopied(false), 2000) // Reset after 2 seconds
+      setTimeout(() => setIsCopied(false), 2000)
     } catch (error) {
       console.error('Failed to copy to clipboard:', error)
     }
@@ -161,12 +96,10 @@ function General() {
         serviceHub.events().emit(SystemEvent.KILL_SIDECAR)
         setTimeout(async () => {
           try {
-            // Prevent relocating to root directory (e.g., C:\ or D:\ on Windows, / on Unix)
             if (isRootDir(selectedNewPath))
               throw new Error(t('settings:general.couldNotRelocateToRoot'))
             await serviceHub.app().relocateJanDataFolder(selectedNewPath)
             setJanDataFolder(selectedNewPath)
-            // Only relaunch if relocation was successful
             window.core?.api?.relaunch()
             setSelectedNewPath(null)
             setIsDialogOpen(false)
@@ -181,7 +114,6 @@ function General() {
         }, 1000)
       } catch (error) {
         console.error('Failed to relocate data folder:', error)
-        // Revert the data folder path on error
         const originalPath = await serviceHub.app().getJanDataFolder()
         setJanDataFolder(originalPath)
 
@@ -198,7 +130,6 @@ function General() {
       if (!update) {
         toast.info(t('settings:general.noUpdateAvailable'))
       }
-      // If update is available, the AppUpdater dialog will automatically show
     } catch (error) {
       console.error('Failed to check for updates:', error)
       toast.error(t('settings:general.updateError'))
@@ -251,6 +182,11 @@ function General() {
               <CardItem
                 title={t('common:language')}
                 actions={<LanguageSwitcher />}
+              />
+              <CardItem
+                title={t('settings:interface.theme')}
+                description={t('settings:interface.themeDesc')}
+                actions={<ThemeSwitcher />}
               />
             </Card>
 
@@ -340,101 +276,6 @@ function General() {
                   </>
                 }
               />
-              <CardItem
-                title={t('settings:dataFolder.appLogs', {
-                  ns: 'settings',
-                })}
-                description={t('settings:dataFolder.appLogsDesc')}
-                className="items-start flex-row gap-y-2"
-                actions={
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="p-0"
-                      onClick={async () => {
-                        if (janDataFolder) {
-                          try {
-                            const logsPath = `${janDataFolder}/logs`
-                            await serviceHub.opener().revealItemInDir(logsPath)
-                          } catch (error) {
-                            console.error(
-                              'Failed to reveal logs folder:',
-                              error
-                            )
-                          }
-                        }
-                      }}
-                      title={t('settings:general.revealLogs')}
-                    >
-                      <IconFolder
-                        size={12}
-                        className="text-muted-foreground"
-                      />
-                      <span>{openFileTitle()}</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleOpenLogs}
-                      title={t('settings:dataFolder.appLogs')}
-                    >
-                      <IconLogs size={12} className="text-muted-foreground" />
-                      <span>{t('settings:general.openLogs')}</span>
-                    </Button>
-                  </div>
-                }
-              />
-            </Card>
-
-            {/* Advanced - Desktop only */}
-            <Card title="Advanced">
-              {IS_TAURI && (
-                <CardItem
-                  title="Jan CLI"
-                  description={
-                    cliInstalled && cliPath
-                      ? `Installed at ${cliPath} — use jan from your terminal to serve models.`
-                      : 'Use jan from your terminal to serve models without opening the app.'
-                  }
-                  actions={
-                    cliInstalled ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleUninstallCli}
-                        disabled={isCliLoading || cliInstalled === null}
-                      >
-                        {isCliLoading ? 'Uninstalling…' : 'Uninstall'}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleInstallCli}
-                        disabled={isCliLoading || cliInstalled === null}
-                      >
-                        {isCliLoading ? 'Installing…' : 'Install'}
-                      </Button>
-                    )
-                  }
-                />
-              )}
-              <CardItem
-                title={t('settings:others.resetFactory', {
-                  ns: 'settings',
-                })}
-                description={t('settings:others.resetFactoryDesc', {
-                  ns: 'settings',
-                })}
-                actions={
-                  <FactoryResetDialog onReset={resetApp}>
-                    <Button variant="destructive" size="sm">
-                      {t('common:reset')}
-                    </Button>
-                  </FactoryResetDialog>
-                }
-              />
             </Card>
 
             {/* Other */}
@@ -453,187 +294,23 @@ function General() {
                   />
                 }
               />
+            </Card>
+
+            {/* Factory Reset - at bottom */}
+            <Card title={t('settings:others.resetFactory', { ns: 'settings' })}>
               <CardItem
-                title={t('settings:general.huggingfaceToken', {
+                title={t('settings:others.resetFactory', {
                   ns: 'settings',
                 })}
-                description={t('settings:general.huggingfaceTokenDesc', {
+                description={t('settings:others.resetFactoryDesc', {
                   ns: 'settings',
                 })}
                 actions={
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="hf-token"
-                      value={huggingfaceToken || ''}
-                      onChange={(e) => setHuggingfaceToken(e.target.value)}
-                      placeholder={'hf_xxx_xxx'}
-                      required
-                    />
-                    <Button
-                      variant="outline"
-                      size='sm'
-                      disabled={isValidatingToken}
-                      onClick={async () => {
-                        const token = (huggingfaceToken || '').trim()
-                        if (!token) {
-                          toast.error(
-                            'Please enter a Hugging Face token to validate'
-                          )
-                          return
-                        }
-                        setIsValidatingToken(true)
-                        const controller = new AbortController()
-                        const timeoutId = setTimeout(
-                          () => controller.abort(),
-                          TOKEN_VALIDATION_TIMEOUT_MS
-                        )
-                        try {
-                          const resp = await fetch(
-                            'https://huggingface.co/api/whoami-v2',
-                            {
-                              headers: { Authorization: `Bearer ${token}` },
-                              signal: controller.signal,
-                            }
-                          )
-                          if (resp.ok) {
-                            const data = await resp.json()
-                            toast.success('Token is valid', {
-                              description: data?.name
-                                ? `Signed in as ${data.name}`
-                                : 'Your Hugging Face token is valid.',
-                            })
-                          } else {
-                            toast.error('Token invalid', {
-                              description:
-                                'The provided Hugging Face token is invalid. Please check your token and try again.',
-                            })
-                          }
-                        } catch (e) {
-                          const name = (e as { name?: string })?.name
-                          if (name === 'AbortError') {
-                            toast.error('Validation timed out', {
-                              description:
-                                'The validation request timed out. Please check your network connection and try again.',
-                            })
-                          } else {
-                            toast.error('Validation failed', {
-                              description:
-                                'A network error occurred while validating the token. Please check your internet connection.',
-                            })
-                          }
-                        } finally {
-                          clearTimeout(timeoutId)
-                          setIsValidatingToken(false)
-                        }
-                      }}
-                    >
-                      Verify
+                  <FactoryResetDialog onReset={resetApp}>
+                    <Button variant="destructive" size="sm">
+                      {t('common:reset')}
                     </Button>
-                  </div>
-                }
-              />
-            </Card>
-
-            {/* Resources */}
-            <Card title={t('settings:general.resources')}>
-              <CardItem
-                title={t('settings:general.documentation')}
-                description={t('settings:general.documentationDesc')}
-                actions={
-                  <a
-                    href="https://jan.ai/docs"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <div className="flex items-center gap-1">
-                      <span>{t('settings:general.viewDocs')}</span>
-                      <IconExternalLink size={14} />
-                    </div>
-                  </a>
-                }
-              />
-              <CardItem
-                title={t('settings:general.releaseNotes')}
-                description={t('settings:general.releaseNotesDesc')}
-                actions={
-                  <a
-                    href="https://github.com/janhq/jan/releases"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <div className="flex items-center gap-1">
-                      <span>{t('settings:general.viewReleases')}</span>
-                      <IconExternalLink size={14} />
-                    </div>
-                  </a>
-                }
-              />
-            </Card>
-
-            {/* Community */}
-            <Card title={t('settings:general.community')}>
-              <CardItem
-                title={t('settings:general.github')}
-                description={t('settings:general.githubDesc')}
-                actions={
-                  <a
-                    href="https://github.com/janhq/jan"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                      <IconBrandGithub
-                        size={18}
-                        className="text-muted-foreground"
-                      />
-                  </a>
-                }
-              />
-              <CardItem
-                title={t('settings:general.discord')}
-                description={t('settings:general.discordDesc')}
-                actions={
-                  <a
-                    href="https://discord.com/invite/FTk2MvZwJH"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <IconBrandDiscord
-                      size={18}
-                      className="text-muted-foreground"
-                    />
-                  </a>
-                }
-              />
-            </Card>
-
-            {/* Support */}
-            <Card title={t('settings:general.support')}>
-              <CardItem
-                title={t('settings:general.reportAnIssue')}
-                description={t('settings:general.reportAnIssueDesc')}
-                actions={
-                  <a
-                    href="https://github.com/janhq/jan/issues/new"
-                    target="_blank"
-                  >
-                    <div className="flex items-center gap-1">
-                      <span>{t('settings:general.reportIssue')}</span>
-                      <IconExternalLink size={14} />
-                    </div>
-                  </a>
-                }
-              />
-            </Card>
-
-            {/* Credits */}
-            <Card title={t('settings:general.credits')}>
-              <CardItem
-                align="start"
-                description={
-                  <div className="text-muted-foreground -mt-2">
-                    <p>{t('settings:general.creditsDesc1')}</p>
-                    <p className="mt-2">{t('settings:general.creditsDesc2')}</p>
-                  </div>
+                  </FactoryResetDialog>
                 }
               />
             </Card>

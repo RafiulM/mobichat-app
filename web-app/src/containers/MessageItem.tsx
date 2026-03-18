@@ -417,17 +417,6 @@ export const MessageItem = memo(
                   </Button>
                 )}
 
-                {onEdit && !isStreaming && (
-                  <EditMessageDialog
-                    message={getFullTextContent()}
-                    onSave={handleEdit}
-                  />
-                )}
-
-                {onDelete && !isStreaming && (
-                  <DeleteMessageDialog onDelete={handleDelete} />
-                )}
-
                 {selectedModel && onRegenerate && !isStreaming && isLastMessage && (
                   <Button
                     variant="ghost"

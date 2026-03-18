@@ -14,15 +14,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ArrowRight, PlusIcon } from 'lucide-react'
+import { ArrowRight, AudioLines, PlusIcon } from 'lucide-react'
 import {
   IconPhoto,
   IconAtom,
-  IconTool,
   IconCodeCircle2,
   IconPlayerStopFilled,
   IconX,
@@ -30,9 +26,11 @@ import {
   IconLoader2,
   IconWorld,
   IconBrandChrome,
-  IconUser,
   IconMicrophone,
   IconMicrophoneOff,
+  IconBulb,
+  IconFlask,
+  IconLayout,
 } from '@tabler/icons-react'
 import { BotIcon } from 'lucide-react'
 import { useTranslation } from '@/i18n/react-i18next-compat'
@@ -53,18 +51,15 @@ import {
 import { localStorageKey } from '@/constants/localStorage'
 import { defaultModel } from '@/lib/models'
 import { useAssistant } from '@/hooks/useAssistant'
-import DropdownToolsAvailable from '@/containers/DropdownToolsAvailable'
 import { AvatarEmoji } from '@/containers/AvatarEmoji'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTools } from '@/hooks/useTools'
 import { TokenCounter } from '@/components/TokenCounter'
 import { useMessages } from '@/hooks/useMessages'
 import { useShallow } from 'zustand/react/shallow'
-import { McpExtensionToolLoader } from './McpExtensionToolLoader'
 import {
   ContentType,
   ExtensionTypeEnum,
-  MCPExtension,
   MessageStatus,
   ThreadMessage,
   fs,
@@ -133,10 +128,10 @@ const ChatInput = memo(function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isFocused, setIsFocused] = useState(false)
   const [rows, setRows] = useState(1)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const serviceHub = useServiceHub()
   const abortControllers = useAppState((state) => state.abortControllers)
   const updateLoadingModel = useAppState((state) => state.updateLoadingModel)
-  const tools = useAppState((state) => state.tools)
   const cancelToolCall = useAppState((state) => state.cancelToolCall)
   const setActiveModels = useAppState((state) => state.setActiveModels)
   const prompt = usePrompt((state) => state.prompt)
@@ -197,8 +192,6 @@ const ChatInput = memo(function ChatInput({
   )
   const updateProvider = useModelProvider((state) => state.updateProvider)
   const [message, setMessage] = useState('')
-  const [dropdownToolsAvailable, setDropdownToolsAvailable] = useState(false)
-  const [tooltipToolsAvailable, setTooltipToolsAvailable] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const [hasMmproj, setHasMmproj] = useState(false)
   const [showVisionModelPrompt, setShowVisionModelPrompt] = useState(false)
@@ -346,15 +339,6 @@ const ChatInput = memo(function ChatInput({
 
     checkMmprojSupport()
   }, [selectedModel, selectedModel?.capabilities, selectedProvider, serviceHub])
-
-  // Check if there are active MCP servers
-  const hasActiveMCPServers =
-    tools.filter((tool) => tool.server !== 'Jan Browser MCP').length > 0
-
-  // Get MCP extension and its custom component
-  const extensionManager = ExtensionManager.getInstance()
-  const mcpExtension = extensionManager.get<MCPExtension>(ExtensionTypeEnum.MCP)
-  const MCPToolComponent = mcpExtension?.getToolComponent?.()
 
   const handleSendMessage = async (prompt: string) => {
     if (!selectedModel) {
@@ -518,11 +502,6 @@ const ChatInput = memo(function ChatInput({
     }
   }, [])
 
-  useEffect(() => {
-    if (tooltipToolsAvailable && dropdownToolsAvailable) {
-      setTooltipToolsAvailable(false)
-    }
-  }, [dropdownToolsAvailable, tooltipToolsAvailable])
 
   // Focus when thread changes
   useEffect(() => {
@@ -540,6 +519,19 @@ const ChatInput = memo(function ChatInput({
       }, 10)
     }
   }, [chatStatus])
+
+  // Auto-submit voice transcripts on home page
+  useEffect(() => {
+    if (
+      initialMessage &&
+      !onSubmit &&
+      speechMode?.sttState === 'processing' &&
+      prompt.trim()
+    ) {
+      handleSendMessage(prompt)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speechMode?.sttState, prompt, initialMessage, onSubmit])
 
   const stopStreaming = useCallback(
     (threadId: string) => {
@@ -1633,75 +1625,47 @@ const ChatInput = memo(function ChatInput({
                           : 'Add documents or files'}
                       </span>
                     </DropdownMenuItem>
-                    {/* Use Assistant - only show when no projectId */}
-                    {!projectId && (
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                          <IconUser size={18} className="text-muted-foreground" />
-                          <span>Use Assistant</span>
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
-                          <DropdownMenuItem
-                            className={!selectedAssistant && !currentThread?.assistants?.length ? 'bg-accent' : ''}
-                            onClick={() => {
-                              setSelectedAssistant(undefined)
-                              if (currentThreadId) {
-                                updateCurrentThreadAssistant(undefined as unknown as Assistant)
-                              }
-                            }}
-                          >
-                            <div className="flex items-center gap-2 w-full">
-                              <span className="text-muted-foreground">—</span>
-                              <span>None</span>
-                              {!selectedAssistant && !currentThread?.assistants?.length && (
-                                <span className="ml-auto text-xs text-muted-foreground">✓</span>
-                              )}
-                            </div>
-                          </DropdownMenuItem>
-                          {assistants.length > 0 ? (
-                            assistants.map((assistant) => {
-                              const isSelected = initialMessage && selectedAssistant?.id === assistant.id ||
-                                (assistant && currentThread?.assistants?.some((a) => a.id === assistant.id))
-                              return (
-                                <DropdownMenuItem
-                                  key={assistant.id}
-                                  className={isSelected ? 'bg-accent' : ''}
-                                  onClick={() => {
-                                    setSelectedAssistant(assistant)
-                                    if (currentThreadId) {
-                                      updateCurrentThreadAssistant(assistant)
-                                    }
-                                  }}
-                                >
-                                  <div className="flex items-center gap-2 w-full">
-                                    <AvatarEmoji
-                                      avatar={assistant.avatar}
-                                      imageClassName="w-4 h-4 object-contain"
-                                      textClassName="text-sm"
-                                    />
-                                    <span>{assistant.name || 'Unnamed Assistant'}</span>
-                                    {isSelected && (
-                                      <span className="ml-auto text-xs text-muted-foreground">
-                                        ✓
-                                      </span>
-                                    )}
-                                  </div>
-                                </DropdownMenuItem>
-                              )
-                            })
-                          ) : (
-                            <DropdownMenuItem disabled>
-                              <span className="text-muted-foreground">
-                                No assistants available
-                              </span>
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
-                    )}
+                    <DropdownMenuItem>
+                      <IconBulb size={18} className="text-muted-foreground" />
+                      <span>Thinking</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <IconFlask size={18} className="text-muted-foreground" />
+                      <span>Deep Research</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <IconLayout size={18} className="text-muted-foreground" />
+                      <span>Canvas</span>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 )}
+                {/* Web search toggle */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => setWebSearchEnabled((prev) => !prev)}
+                      className={cn(
+                        'rounded-full mb-1',
+                        webSearchEnabled && 'text-primary bg-primary/10 hover:bg-primary/20'
+                      )}
+                    >
+                      <IconWorld
+                        size={18}
+                        className={cn(
+                          'text-muted-foreground',
+                          webSearchEnabled && 'text-primary'
+                        )}
+                      />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{webSearchEnabled ? 'Disable web search' : 'Web search'}</p>
+                  </TooltipContent>
+                </Tooltip>
+
                 {/* {model?.provider === 'llamacpp' && loadingModel ? (
                   <ModelLoader />
                 ) : (
@@ -1771,70 +1735,6 @@ const ChatInput = memo(function ChatInput({
                   </Tooltip>
                 )}
 
-                {!effectiveAgentMode && selectedModel?.capabilities?.includes('tools') &&
-                  hasActiveMCPServers &&
-                  (MCPToolComponent ? (
-                    // Use custom MCP component
-                    <McpExtensionToolLoader
-                      tools={tools}
-                      hasActiveMCPServers={hasActiveMCPServers}
-                      selectedModelHasTools={
-                        selectedModel?.capabilities?.includes('tools') ?? false
-                      }
-                      initialMessage={initialMessage}
-                      MCPToolComponent={MCPToolComponent}
-                    />
-                  ) : (
-                    // Use default tools dropdown
-                    <Tooltip
-                      open={tooltipToolsAvailable}
-                      onOpenChange={setTooltipToolsAvailable}
-                    >
-                      <TooltipTrigger
-                        asChild
-                        disabled={dropdownToolsAvailable}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={(e) => {
-                            setDropdownToolsAvailable(false)
-                            e.stopPropagation()
-                          }}
-                        >
-                          <DropdownToolsAvailable
-                            initialMessage={initialMessage}
-                            onOpenChange={(isOpen) => {
-                              setDropdownToolsAvailable(isOpen)
-                              if (isOpen) {
-                                setTooltipToolsAvailable(false)
-                              }
-                            }}
-                          >
-                            {() => {
-                              return (
-                                <div
-                                  className={cn(
-                                    'p-1 flex items-center justify-center rounded-sm transition-all duration-200 ease-in-out gap-1 cursor-pointer',
-                                  )}
-                                >
-                                  <IconTool
-                                    size={18}
-                                    className={cn(
-                                      'text-muted-foreground',
-                                    )}
-                                  />
-                                </div>
-                              )
-                            }}
-                          </DropdownToolsAvailable>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{t('tools')}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
 
                 {openClawAvailable && !projectId && isAgentMode && (
                   <Tooltip>
@@ -1968,6 +1868,21 @@ const ChatInput = memo(function ChatInput({
                   }}
                 >
                   <IconPlayerStopFilled />
+                </Button>
+              ) : initialMessage && !prompt.trim() && speechMode ? (
+                <Button
+                  variant="default"
+                  size="icon-sm"
+                  data-test-id="voice-mode-button"
+                  onClick={() => {
+                    speechMode.toggleVoiceMode()
+                    if (!speechMode.isVoiceModeActive) {
+                      speechMode.setOverlayOpen(true)
+                    }
+                  }}
+                  className="rounded-full mr-1 mb-1"
+                >
+                  <AudioLines size={18} className="text-primary-fg" />
                 </Button>
               ) : (
                 <Button

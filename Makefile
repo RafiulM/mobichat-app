@@ -63,9 +63,12 @@ dev-app: install-and-build
 	yarn download:bin
 	make build-mlx-server-if-exists
 	make build-cli-dev
+	yarn build:icon
+	yarn copy:assets:tauri
 	@echo "Building frontend..."
 	cd web-app && IS_TAURI=true TAURI_ENV_PLATFORM=darwin yarn build
 	@echo "Building Tauri binary..."
+	@touch src-tauri/src/main.rs
 	cd src-tauri && cargo build
 	@echo "Creating .app bundle..."
 	@mkdir -p src-tauri/target/debug/Jan.app/Contents/MacOS
@@ -82,6 +85,16 @@ dev-app: install-and-build
 	@codesign --force --sign - --entitlements src-tauri/Entitlements.plist src-tauri/target/debug/Jan.app 2>/dev/null || true
 	@echo "Launching Jan.app..."
 	open src-tauri/target/debug/Jan.app
+
+# Dev with hot-reload + .app bundle for voice/mic features.
+# Combines the best of `make dev` (hot-reload) and `make dev-app` (TCC permissions).
+dev-voice: install-and-build
+	yarn download:bin
+	make build-mlx-server-if-exists
+	make build-cli-dev
+	yarn build:icon
+	yarn copy:assets:tauri
+	@bash scripts/dev-voice.sh
 
 # Web application targets
 install-web-app:
