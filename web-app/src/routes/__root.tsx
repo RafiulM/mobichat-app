@@ -30,6 +30,10 @@ import { ServiceHubProvider } from '@/providers/ServiceHubProvider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LeftSidebar } from '@/components/left-sidebar'
 import { WindowControls } from '@/components/WindowControls'
+import SetupScreen from '@/containers/SetupScreen'
+import { localStorageKey } from '@/constants/localStorage'
+import { useModelProvider } from '@/hooks/useModelProvider'
+import { predefinedProviders } from '@/constants/providers'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -45,6 +49,41 @@ const AppLayout = () => {
     width: sidebarWidth,
     setLeftPanelWidth,
   } = useLeftPanel()
+
+  const { providers } = useModelProvider()
+  const setupCompleted =
+    localStorage.getItem(localStorageKey.setupCompleted) === 'true'
+
+  // Check if user has any valid providers (same logic as useJanModelPrompt)
+  const hasValidProviders = providers.some((provider) => {
+    const isPredefinedProvider = predefinedProviders.some(
+      (p) => p.provider === provider.provider
+    )
+    if (!isPredefinedProvider) {
+      return provider.models.length > 0
+    }
+    return (
+      provider.api_key?.length ||
+      (provider.provider === 'llamacpp' && provider.models.length) ||
+      (provider.provider === 'jan' && provider.models.length)
+    )
+  })
+
+  const showSetupScreen = !setupCompleted && !hasValidProviders
+
+  if (showSetupScreen) {
+    return (
+      <div className="bg-neutral-50 dark:bg-background size-full relative">
+        {!IS_LINUX && (
+          <div
+            className="fixed w-full h-12 z-20 top-0"
+            data-tauri-drag-region
+          />
+        )}
+        <SetupScreen />
+      </div>
+    )
+  }
 
   return (
     <div className="bg-neutral-50 dark:bg-background size-full relative">
