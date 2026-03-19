@@ -73,7 +73,7 @@ const AppLayout = () => {
 
   if (showSetupScreen) {
     return (
-      <div className="bg-neutral-50 dark:bg-background size-full relative">
+      <div className="bg-neutral-50 dark:bg-[#0C0C10] size-full relative">
         {!IS_LINUX && (
           <div
             className="fixed w-full h-12 z-20 top-0"

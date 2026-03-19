@@ -6,18 +6,6 @@ import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEffect, useMemo, useCallback, useState, useRef } from 'react'
 import { AppEvent, events } from '@janhq/core'
-import { Button } from '@/components/ui/button'
-import {
-  IconCpu,
-  IconDeviceDesktop,
-  IconServer,
-  IconDatabase,
-  IconBrandApple,
-  IconCheck,
-  IconDownload,
-  IconMessageCircle,
-  IconArrowRight,
-} from '@tabler/icons-react'
 import { cn, formatMegaBytes } from '@/lib/utils'
 import { useHardware } from '@/hooks/useHardware'
 import { useModelSources } from '@/hooks/useModelSources'
@@ -37,6 +25,65 @@ const STEPS: { key: Step; label: string }[] = [
 type SelectedModel = {
   catalog: CatalogModel
   variant: ModelQuant
+}
+
+// Model icon color palette
+const MODEL_ICON_COLORS = [
+  { bg: '#60A5FA1F', stroke: '#60A5FA' }, // blue
+  { bg: '#FBBF241F', stroke: '#FBBF24' }, // amber
+  { bg: '#F871711F', stroke: '#F87171' }, // red
+  { bg: '#8B5CF61F', stroke: '#8B5CF6' }, // violet
+  { bg: '#38BDF81F', stroke: '#38BDF8' }, // cyan
+  { bg: '#F472B61F', stroke: '#F472B6' }, // pink
+  { bg: '#FB923C1F', stroke: '#FB923C' }, // orange
+]
+
+function getModelIconColor(index: number) {
+  return MODEL_ICON_COLORS[index % MODEL_ICON_COLORS.length]
+}
+
+// Derive speed/capability tag from model name
+function getModelTags(model: CatalogModel): string[] {
+  const tags: string[] = ['Text']
+
+  if ((model.mmproj_models?.length ?? 0) > 0) {
+    tags.push('Vision')
+  }
+  if (model.tools) {
+    tags.push('Code')
+  }
+
+  // Derive speed/reasoning from model name
+  const name = model.model_name.toLowerCase()
+  const sizeMatch = name.match(/(\d+\.?\d*)b/i)
+  const paramSize = sizeMatch ? parseFloat(sizeMatch[1]) : 0
+
+  if (paramSize > 0 && paramSize <= 3) {
+    tags.push('Fast')
+  } else if (paramSize > 3 && paramSize <= 8) {
+    tags.push('Good reasoning')
+  } else if (paramSize > 8 && paramSize <= 30) {
+    tags.push('Strong reasoning')
+  } else if (paramSize > 30) {
+    tags.push('Advanced')
+  }
+
+  return tags
+}
+
+// Format download count
+function formatDownloads(count: number): string {
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`
+  return String(count)
+}
+
+// Get display name from model
+function getDisplayName(model: CatalogModel) {
+  return model.model_name
+    .replace(/^.*\//, '')
+    .replace(/-GGUF$/i, '')
+    .replace(/-gguf$/i, '')
 }
 
 function SetupScreen() {
@@ -63,6 +110,7 @@ function SetupScreen() {
   >({})
   const [downloadsStarted, setDownloadsStarted] = useState(false)
   const importedModelsRef = useRef<Set<string>>(new Set())
+  const [storageInfo, setStorageInfo] = useState<string>('')
 
   // Fetch model catalog on mount
   useEffect(() => {
@@ -92,12 +140,25 @@ function SetupScreen() {
       .catch(console.error)
   }, [serviceHub])
 
+  // Estimate storage
+  useEffect(() => {
+    if (navigator.storage?.estimate) {
+      navigator.storage.estimate().then((estimate) => {
+        const quotaGB = (estimate.quota ?? 0) / (1024 * 1024 * 1024)
+        const usageGB = (estimate.usage ?? 0) / (1024 * 1024 * 1024)
+        const freeGB = quotaGB - usageGB
+        if (freeGB > 0) {
+          setStorageInfo(`${Math.round(freeGB)} GB free`)
+        }
+      }).catch(() => {})
+    }
+  }, [])
+
   // Calculate capability score (0-100)
   const capabilityScore = useMemo(() => {
     const totalRamMB = hardwareData.total_memory
     if (!totalRamMB) return 0
     const totalRamGB = totalRamMB / 1024
-    // Score based on RAM: 8GB=40, 16GB=65, 32GB=85, 64GB+=100
     const ramScore = Math.min(100, Math.max(0, (totalRamGB / 64) * 100))
     const coreScore = Math.min(
       100,
@@ -107,10 +168,32 @@ function SetupScreen() {
   }, [hardwareData])
 
   const capabilityLabel = useMemo(() => {
-    if (capabilityScore >= 70) return { text: 'Good', color: 'bg-emerald-500' }
+    if (capabilityScore >= 70)
+      return {
+        text: 'Good',
+        description: 'Your device can run small & medium models smoothly',
+        dotColor: '#4ADE80',
+        badgeBg: '#4ADE801A',
+        badgeBorder: '#4ADE8033',
+        barColor: '#4ADE80',
+      }
     if (capabilityScore >= 40)
-      return { text: 'Moderate', color: 'bg-amber-500' }
-    return { text: 'Limited', color: 'bg-red-500' }
+      return {
+        text: 'Moderate',
+        description: 'Your device can run small models',
+        dotColor: '#F59E0B',
+        badgeBg: '#F59E0B1A',
+        badgeBorder: '#F59E0B33',
+        barColor: '#F59E0B',
+      }
+    return {
+      text: 'Limited',
+      description: 'Your device can run lightweight models',
+      dotColor: '#EF4444',
+      badgeBg: '#EF44441A',
+      badgeBorder: '#EF444433',
+      barColor: '#EF4444',
+    }
   }, [capabilityScore])
 
   const availableRamMB = useMemo(() => {
@@ -118,7 +201,7 @@ function SetupScreen() {
     return hardwareData.total_memory - systemUsage.used_memory
   }, [hardwareData.total_memory, systemUsage.used_memory])
 
-  // Get models suitable for the grid — filter to non-MLX GGUF models, sorted by downloads
+  // Get models suitable for the grid
   const gridModels = useMemo(() => {
     return sources
       .filter((m) => !m.is_mlx && (m.quants?.length ?? 0) > 0)
@@ -168,20 +251,17 @@ function SetupScreen() {
   }, [gridModels, serviceHub])
 
   // Toggle model selection
-  const toggleModel = useCallback(
-    (modelName: string) => {
-      setSelectedModels((prev) => {
-        const next = new Set(prev)
-        if (next.has(modelName)) {
-          next.delete(modelName)
-        } else {
-          next.add(modelName)
-        }
-        return next
-      })
-    },
-    []
-  )
+  const toggleModel = useCallback((modelName: string) => {
+    setSelectedModels((prev) => {
+      const next = new Set(prev)
+      if (next.has(modelName)) {
+        next.delete(modelName)
+      } else {
+        next.add(modelName)
+      }
+      return next
+    })
+  }, [])
 
   // Get selected model details for download
   const selectedModelDetails = useMemo((): SelectedModel[] => {
@@ -282,7 +362,6 @@ function SetupScreen() {
   const finishSetup = useCallback(() => {
     localStorage.setItem(localStorageKey.setupCompleted, 'true')
 
-    // Try to select the first imported model
     const firstImported = selectedModelDetails.find((m) =>
       importedModelsRef.current.has(m.variant.model_id)
     )
@@ -313,92 +392,138 @@ function SetupScreen() {
     navigate({ to: route.home, replace: true })
   }, [navigate])
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0'
-    const gb = bytes / (1024 * 1024 * 1024)
-    if (gb >= 1) return `${gb.toFixed(1)} GB`
-    const mb = bytes / (1024 * 1024)
-    return `${mb.toFixed(0)} MB`
-  }
-
   // System specs data
   const specs = useMemo(
     () => [
       {
-        icon: IconServer,
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="4" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M5 8H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        ),
         label: 'RAM',
         value: formatMegaBytes(hardwareData.total_memory),
       },
       {
-        icon: IconCpu,
-        label: 'Chip',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="3" y="4" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M6 8L8 10L10 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+        label: 'CHIP',
         value:
           hardwareData.cpu.name?.split(' ').slice(0, 3).join(' ') || 'Unknown',
       },
       {
-        icon: IconDatabase,
-        label: 'Available RAM',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="8" cy="10" r="1" fill="currentColor" />
+          </svg>
+        ),
+        label: 'STORAGE',
+        value: storageInfo || 'N/A',
+      },
+      {
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="4" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M5 8H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        ),
+        label: 'AVAILABLE RAM',
         value: formatMegaBytes(availableRamMB),
       },
       {
-        icon: IconDeviceDesktop,
-        label: 'CPU Cores',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="3" y="4" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M6 8L8 10L10 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+        label: 'CPU CORES',
         value: `${hardwareData.cpu.core_count} cores`,
       },
       {
-        icon: IconBrandApple,
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="8" cy="10" r="1" fill="currentColor" />
+          </svg>
+        ),
         label: 'OS',
         value: hardwareData.os_name || 'Unknown',
       },
-      {
-        icon: IconCpu,
-        label: 'Architecture',
-        value: hardwareData.cpu.arch || 'Unknown',
-      },
     ],
-    [hardwareData, availableRamMB]
+    [hardwareData, availableRamMB, storageInfo]
   )
 
   const stepIndex = STEPS.findIndex((s) => s.key === currentStep)
 
   return (
-    <div className="relative flex flex-col h-svh w-full overflow-hidden bg-background">
-      {/* Header */}
-      <div className="flex items-center justify-end h-12 px-6 shrink-0">
-        <button
-          onClick={skipSetup}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-        >
-          Skip setup
-        </button>
-      </div>
+    <div className="relative flex flex-col h-svh w-full overflow-hidden bg-[#0C0C10]">
+      {/* Background glow */}
+      <div
+        className="pointer-events-none absolute left-1/2 top-[60px] -translate-x-1/2 w-[600px] h-[400px] rounded-full"
+        style={{
+          background:
+            'radial-gradient(circle, rgba(134,94,234,0.06) 0%, transparent 70%)',
+        }}
+      />
 
-      {/* Step indicators */}
-      <div className="flex items-center justify-center gap-6 py-3 shrink-0">
-        {STEPS.map((step, i) => (
-          <div key={step.key} className="flex items-center gap-2">
-            <div
-              className={cn(
-                'size-2 rounded-full transition-colors',
-                i < stepIndex
-                  ? 'bg-emerald-500'
-                  : i === stepIndex
-                    ? 'bg-primary'
-                    : 'bg-muted-foreground/30'
+      {/* Top bar with step indicator and skip */}
+      <div className="relative flex items-center justify-center h-[72px] px-6 shrink-0">
+        {/* Step indicator */}
+        <div className="flex items-center gap-0">
+          {STEPS.map((step, i) => (
+            <div key={step.key} className="flex items-center">
+              <div className="flex items-center gap-1.5">
+                <div
+                  className="size-[7px] rounded-full"
+                  style={{
+                    backgroundColor:
+                      i < stepIndex
+                        ? '#4ADE80'
+                        : i === stepIndex
+                          ? '#865EEA'
+                          : '#2A2A35',
+                  }}
+                />
+                <span
+                  className={cn(
+                    'text-[13px]',
+                    i === stepIndex
+                      ? 'text-white font-semibold'
+                      : 'text-[#6E6E7A]'
+                  )}
+                >
+                  {step.label}
+                </span>
+              </div>
+              {i < STEPS.length - 1 && (
+                <div
+                  className="w-6 h-px mx-3"
+                  style={{
+                    backgroundColor:
+                      i < stepIndex ? '#4ADE80' : '#2A2A35',
+                  }}
+                />
               )}
-            />
-            <span
-              className={cn(
-                'text-xs font-medium transition-colors',
-                i === stepIndex
-                  ? 'text-foreground'
-                  : 'text-muted-foreground/60'
-              )}
-            >
-              {step.label}
-            </span>
-          </div>
-        ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Skip setup */}
+        {currentStep !== 'done' && (
+          <button
+            onClick={skipSetup}
+            className="absolute right-6 text-[13px] text-[#6E6E7A] hover:text-white transition-colors cursor-pointer"
+          >
+            Skip setup
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -423,7 +548,6 @@ function SetupScreen() {
               selectedCount={selectedModels.size}
               sourcesLoading={sourcesLoading}
               onDownload={startDownloads}
-              onBack={() => setCurrentStep('system')}
             />
           )}
           {currentStep === 'done' && (
@@ -431,7 +555,6 @@ function SetupScreen() {
               downloadProgress={downloadProgress}
               selectedModelDetails={selectedModelDetails}
               allDownloadsComplete={allDownloadsComplete}
-              formatBytes={formatBytes}
               onFinish={finishSetup}
             />
           )}
@@ -449,74 +572,125 @@ function SystemStep({
   capabilityLabel,
   onNext,
 }: {
-  specs: { icon: React.ElementType; label: string; value: string }[]
+  specs: { icon: React.ReactNode; label: string; value: string }[]
   capabilityScore: number
-  capabilityLabel: { text: string; color: string }
+  capabilityLabel: {
+    text: string
+    description: string
+    dotColor: string
+    badgeBg: string
+    badgeBorder: string
+    barColor: string
+  }
   onNext: () => void
 }) {
   return (
-    <div className="w-full max-w-[480px]">
+    <div className="w-full max-w-[560px]">
+      {/* Header */}
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-secondary mb-4">
-          <IconDeviceDesktop className="size-7 text-foreground" />
+        <div
+          className="inline-flex items-center justify-center size-14 rounded-2xl mb-4"
+          style={{
+            background:
+              'linear-gradient(135deg, rgba(134,94,234,0.2), rgba(134,94,234,0.05))',
+            border: '1px solid #865EEA40',
+          }}
+        >
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 8V6a2 2 0 0 1 2-2h2" />
+            <path d="M4 16v2a2 2 0 0 0 2 2h2" />
+            <path d="M16 4h2a2 2 0 0 1 2 2v2" />
+            <path d="M16 20h2a2 2 0 0 0 2-2v-2" />
+            <rect x="9" y="9" width="6" height="6" rx="1" />
+          </svg>
         </div>
-        <h1 className="text-2xl font-semibold mb-2">
-          Your system at a glance
+        <h1 className="text-[28px] font-bold text-white tracking-tight mb-2">
+          Let&apos;s check your system
         </h1>
-        <p className="text-muted-foreground text-sm">
-          Here&apos;s what Jan detected about your device.
+        <p className="text-[15px] text-[#6E6E7A]">
+          We&apos;ll scan your hardware to find the best AI models for your
+          machine.
         </p>
       </div>
 
-      {/* Capability bar */}
-      <div className="my-8">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-muted-foreground">
-            Device capability
-          </span>
-          <span
-            className={cn(
-              'text-xs font-medium px-2 py-0.5 rounded-full text-white',
-              capabilityLabel.color
-            )}
-          >
-            {capabilityLabel.text}
-          </span>
-        </div>
-        <div className="h-2 rounded-full bg-secondary overflow-hidden">
-          <div
-            className={cn(
-              'h-full rounded-full transition-all duration-700',
-              capabilityLabel.color
-            )}
-            style={{ width: `${Math.max(capabilityScore, 5)}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Spec grid */}
-      <div className="grid grid-cols-2 gap-3">
-        {specs.map(({ icon: Icon, label, value }) => (
+      {/* Spec grid — 3 columns */}
+      <div className="grid grid-cols-3 gap-3">
+        {specs.map(({ icon, label, value }) => (
           <div
             key={label}
-            className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"
+            className="flex flex-col gap-1.5 rounded-xl p-4"
+            style={{
+              backgroundColor: '#111118',
+              border: '1px solid #1E1E28',
+            }}
           >
-            <Icon className="size-4 text-muted-foreground shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className="text-sm font-medium truncate">{value}</p>
+            <div className="flex items-center gap-1.5 text-[#6E6E7A]">
+              {icon}
+              <span className="text-[11px] font-medium tracking-wider text-[#7A7A88] uppercase">
+                {label}
+              </span>
             </div>
+            <p className="text-lg font-semibold text-[#F0F0F2]">{value}</p>
           </div>
         ))}
       </div>
 
-      <Button
+      {/* Capability summary */}
+      <div className="mt-6">
+        <div className="flex items-center gap-3 mb-3">
+          <div
+            className="flex items-center gap-1.5 rounded-full px-3 py-[5px]"
+            style={{
+              backgroundColor: capabilityLabel.badgeBg,
+              border: `1px solid ${capabilityLabel.badgeBorder}`,
+            }}
+          >
+            <div
+              className="size-1.5 rounded-full"
+              style={{ backgroundColor: capabilityLabel.dotColor }}
+            />
+            <span
+              className="text-[13px] font-semibold"
+              style={{ color: capabilityLabel.dotColor }}
+            >
+              {capabilityLabel.text}
+            </span>
+          </div>
+          <span className="text-[13px] text-[#6E6E7A]">
+            {capabilityLabel.description}
+          </span>
+        </div>
+        <div
+          className="h-1 w-full rounded-full"
+          style={{ backgroundColor: '#1E1E28' }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${Math.max(capabilityScore, 5)}%`,
+              backgroundColor: capabilityLabel.barColor,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* CTA */}
+      <button
         onClick={onNext}
-        className="w-full mt-8 gap-2"
+        className="w-full mt-8 rounded-full py-3 px-8 text-[15px] font-semibold text-white cursor-pointer transition-colors"
+        style={{ backgroundColor: '#865EEA' }}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.backgroundColor = '#7A52D9')
+        }
+        onMouseLeave={(e) =>
+          (e.currentTarget.style.backgroundColor = '#865EEA')
+        }
       >
         Explore compatible models
-        <IconArrowRight className="size-4" />
-      </Button>
+      </button>
+      <p className="text-center text-[13px] text-[#55555E] mt-3">
+        You can download models later in Settings
+      </p>
     </div>
   )
 }
@@ -531,7 +705,6 @@ function ModelsStep({
   selectedCount,
   sourcesLoading,
   onDownload,
-  onBack,
 }: {
   models: CatalogModel[]
   selectedModels: Set<string>
@@ -542,146 +715,170 @@ function ModelsStep({
   selectedCount: number
   sourcesLoading: boolean
   onDownload: () => void
-  onBack: () => void
 }) {
-  // Extract model display name
-  const getDisplayName = (model: CatalogModel) => {
-    const name = model.model_name
-    // Clean up common HuggingFace name patterns
-    return name
-      .replace(/^.*\//, '')
-      .replace(/-GGUF$/i, '')
-      .replace(/-gguf$/i, '')
-  }
-
-  const getModelDescription = (model: CatalogModel): string => {
-    if (model.description) {
-      // Truncate long descriptions
-      const clean = model.description.replace(/[#*_]/g, '').trim()
-      return clean.length > 60 ? clean.slice(0, 57) + '...' : clean
-    }
-    return 'General-purpose language model'
-  }
-
-  const getSupportChip = (variant: ModelQuant | undefined) => {
-    if (!variant) return null
-    const status = modelSupport[variant.model_id]
-    if (!status || status === 'LOADING') {
-      return (
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-          Checking...
-        </span>
-      )
-    }
-    const config: Record<string, { label: string; classes: string }> = {
-      GREEN: {
-        label: 'Compatible',
-        classes:
-          'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-      },
-      YELLOW: {
-        label: 'Marginal',
-        classes: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-      },
-      RED: {
-        label: 'Too large',
-        classes: 'bg-red-500/10 text-red-600 dark:text-red-400',
-      },
-      GREY: {
-        label: 'Unknown',
-        classes: 'bg-muted text-muted-foreground',
-      },
-    }
-    const c = config[status] || config.GREY
-    return (
-      <span className={cn('text-[10px] px-1.5 py-0.5 rounded', c.classes)}>
-        {c.label}
-      </span>
-    )
-  }
-
   return (
-    <div className="w-full max-w-[700px]">
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-semibold mb-2">Choose your models</h1>
-        <p className="text-muted-foreground text-sm">
-          Select models to download. They&apos;ll run locally on your device.
+    <div className="w-full max-w-[960px]">
+      <div className="text-center mb-8">
+        <h1 className="text-[32px] font-bold text-white tracking-tight mb-2">
+          Choose your models
+        </h1>
+        <p className="text-[16px] text-[#8E8E9A]">
+          Select models to download. They&apos;ll be ready to use when setup is
+          complete.
         </p>
       </div>
 
       {sourcesLoading && models.length === 0 ? (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2.5">
           {Array.from({ length: 9 }).map((_, i) => (
             <div
               key={i}
-              className="h-[140px] rounded-lg bg-secondary/50 animate-pulse"
+              className="h-[138px] rounded-[14px] animate-pulse"
+              style={{ backgroundColor: '#111118' }}
             />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-3">
-          {models.map((model) => {
+        <div className="grid grid-cols-3 gap-2.5">
+          {models.map((model, modelIndex) => {
             const variant = getDefaultVariant(model)
             const isSelected = selectedModels.has(model.model_name)
+            const status = variant ? modelSupport[variant.model_id] : undefined
+            const iconColor = getModelIconColor(modelIndex)
+            const tags = getModelTags(model)
+            const isFirstModel = modelIndex === 0
 
             return (
               <button
                 key={model.model_name}
                 onClick={() => toggleModel(model.model_name)}
                 className={cn(
-                  'relative text-left p-3 rounded-lg border transition-all cursor-pointer',
-                  'hover:border-foreground/20 hover:shadow-sm',
-                  isSelected
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border bg-secondary/30'
+                  'relative flex flex-col text-left rounded-[14px] p-3.5 gap-2.5 cursor-pointer transition-all',
+                  status === 'RED' && 'opacity-50'
                 )}
+                style={{
+                  backgroundColor: '#111118',
+                  border: isSelected
+                    ? '1.5px solid #865EEA'
+                    : '1px solid #1E1E28',
+                }}
               >
-                {/* Compatibility chip - top right */}
-                <div className="absolute top-2 right-2">
-                  {getSupportChip(variant)}
-                </div>
-
-                {/* Selection indicator */}
-                {isSelected && (
-                  <div className="absolute -top-1.5 -left-1.5 size-5 rounded-full bg-primary flex items-center justify-center">
-                    <IconCheck className="size-3 text-primary-foreground" />
+                {/* Recommended badge */}
+                {isFirstModel && (
+                  <div
+                    className="absolute rounded-full px-2.5 py-0.5"
+                    style={{
+                      top: '-9px',
+                      left: '14px',
+                      backgroundColor: '#865EEA',
+                    }}
+                  >
+                    <span className="text-[11px] font-medium text-white">
+                      Recommended
+                    </span>
                   </div>
                 )}
 
-                {/* Model info */}
-                <div className="pr-16">
-                  <h3 className="text-sm font-semibold truncate">
-                    {getDisplayName(model)}
-                  </h3>
+                {/* Header row */}
+                <div
+                  className="flex items-center justify-between"
+                  style={{ paddingTop: isFirstModel ? '4px' : '0' }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* Model icon */}
+                    <div
+                      className="flex items-center justify-center shrink-0 rounded-md"
+                      style={{
+                        width: '22px',
+                        height: '22px',
+                        backgroundColor: iconColor.bg,
+                      }}
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                      >
+                        <path
+                          d="M4 2L8 4L12 2V10L8 12L4 10V2Z"
+                          stroke={iconColor.stroke}
+                          strokeWidth="1.3"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M8 4V12"
+                          stroke={iconColor.stroke}
+                          strokeWidth="1.3"
+                        />
+                      </svg>
+                    </div>
+                    {/* Name + size */}
+                    <div className="flex flex-col gap-px min-w-0">
+                      <span className="text-[14px] font-semibold text-white truncate">
+                        {getDisplayName(model)}
+                      </span>
+                      {variant && (
+                        <span className="text-[11px] text-[#55555E]">
+                          {variant.file_size
+                            ? `${variant.file_size}`
+                            : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Compatibility pill */}
                   {variant && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {variant.file_size}
-                    </p>
+                    <CompatibilityPill status={status} />
                   )}
                 </div>
 
-                <p className="text-xs text-muted-foreground mt-2 line-clamp-2 leading-relaxed">
-                  {getModelDescription(model)}
+                {/* Description */}
+                <p className="text-[12px] text-[#6E6E7A] line-clamp-2 leading-[16px]">
+                  {model.description
+                    ? model.description
+                        .replace(/[#*_]/g, '')
+                        .trim()
+                        .slice(0, 80)
+                    : 'General-purpose language model'}
                 </p>
 
-                {/* Badges row */}
-                <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                  {(model.mmproj_models?.length ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
-                      Vision
+                {/* Tag chips */}
+                <div className="flex items-center gap-[5px] flex-wrap">
+                  {tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-[3px] text-[10px] font-medium text-[#8E8E9A]"
+                      style={{ backgroundColor: '#1A1A22' }}
+                    >
+                      <TagIcon tag={tag} />
+                      {tag}
                     </span>
-                  )}
-                  {model.tools && (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
-                      Tools
-                    </span>
-                  )}
+                  ))}
                   {model.downloads > 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
-                      <IconDownload className="size-2.5" />
-                      {model.downloads >= 1000
-                        ? `${(model.downloads / 1000).toFixed(0)}k`
-                        : model.downloads}
+                    <span
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-[3px] text-[10px] font-medium text-[#8E8E9A]"
+                      style={{ backgroundColor: '#1A1A22' }}
+                    >
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                      >
+                        <path
+                          d="M3 13V5L8 2L13 5V13"
+                          stroke="#6E6E7A"
+                          strokeWidth="1.2"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M6 13V9H10V13"
+                          stroke="#6E6E7A"
+                          strokeWidth="1.2"
+                        />
+                      </svg>
+                      {formatDownloads(model.downloads)}
                     </span>
                   )}
                 </div>
@@ -691,20 +888,30 @@ function ModelsStep({
         </div>
       )}
 
-      <div className="flex items-center gap-3 mt-6">
-        <Button variant="outline" onClick={onBack} className="px-6">
-          Back
-        </Button>
-        <Button
-          onClick={onDownload}
-          disabled={selectedCount === 0}
-          className="flex-1 gap-2"
-        >
-          {selectedCount > 0
-            ? `Download ${selectedCount} model${selectedCount > 1 ? 's' : ''} (${totalDownloadSize.toFixed(1)} GB) and continue`
-            : 'Select models to continue'}
-        </Button>
-      </div>
+      {/* CTA */}
+      <button
+        onClick={onDownload}
+        disabled={selectedCount === 0}
+        className={cn(
+          'w-full mt-8 rounded-full py-3 px-8 text-[15px] font-semibold text-white cursor-pointer transition-colors',
+          selectedCount === 0 && 'opacity-50 cursor-not-allowed'
+        )}
+        style={{ backgroundColor: '#865EEA' }}
+        onMouseEnter={(e) => {
+          if (selectedCount > 0)
+            e.currentTarget.style.backgroundColor = '#7A52D9'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#865EEA'
+        }}
+      >
+        {selectedCount > 0
+          ? `Download ${selectedCount} model${selectedCount > 1 ? 's' : ''} (${totalDownloadSize.toFixed(1)} GB) and continue`
+          : 'Select models to continue'}
+      </button>
+      <p className="text-center text-[13px] text-[#55555E] mt-3">
+        Models will download in the background
+      </p>
     </div>
   )
 }
@@ -713,7 +920,6 @@ function DoneStep({
   downloadProgress,
   selectedModelDetails,
   allDownloadsComplete,
-  formatBytes,
   onFinish,
 }: {
   downloadProgress: {
@@ -726,85 +932,263 @@ function DoneStep({
   }[]
   selectedModelDetails: SelectedModel[]
   allDownloadsComplete: boolean
-  formatBytes: (bytes: number) => string
   onFinish: () => void
 }) {
   return (
-    <div className="w-full max-w-[480px]">
+    <div className="w-full max-w-[440px]">
+      {/* Header */}
       <div className="text-center mb-8">
         <div
-          className={cn(
-            'inline-flex items-center justify-center size-14 rounded-2xl mb-4',
-            allDownloadsComplete ? 'bg-emerald-500/10' : 'bg-secondary'
-          )}
+          className="inline-flex items-center justify-center size-16 rounded-full mb-4"
+          style={{ backgroundColor: '#865EEA1F' }}
         >
-          {allDownloadsComplete ? (
-            <IconCheck className="size-7 text-emerald-500" />
-          ) : (
-            <IconDownload className="size-7 text-foreground" />
-          )}
+          <svg
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="white"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M5 12l5 5L20 7" />
+          </svg>
         </div>
-        <h1 className="text-2xl font-semibold mb-2">
-          {allDownloadsComplete ? 'You\'re all set!' : 'Downloading models...'}
+        <h1 className="text-[32px] font-bold text-white tracking-tight mb-2">
+          {allDownloadsComplete ? "You're all set!" : "You're all set!"}
         </h1>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-[15px] text-[#6E6E7A]">
           {allDownloadsComplete
             ? 'Your models are ready. Start chatting now.'
-            : 'This may take a few minutes. You can start chatting while models download.'}
+            : 'Your models are downloading in the background. Start chatting now.'}
         </p>
       </div>
 
-      {/* Download progress list */}
-      <div className="flex flex-col gap-3 mb-8">
+      {/* Download status list */}
+      <div className="flex flex-col gap-2.5 mb-8">
         {selectedModelDetails.map(({ catalog, variant }, i) => {
           const progress = downloadProgress[i]
-          const name = catalog.model_name
-            .replace(/^.*\//, '')
-            .replace(/-GGUF$/i, '')
+          const name = getDisplayName(catalog)
+          const isDownloading = progress?.isActive && !progress?.imported
+          const isQueued = !progress?.isActive && !progress?.imported
 
           return (
             <div
               key={variant.model_id}
-              className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"
+              className="flex items-center gap-3 rounded-[10px]"
+              style={{
+                backgroundColor: '#16161D',
+                border: '1px solid #2A2A35',
+                padding: '14px 18px',
+              }}
             >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-medium truncate">{name}</p>
-                  {progress?.imported ? (
-                    <IconCheck className="size-4 text-emerald-500 shrink-0" />
-                  ) : progress?.isActive ? (
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {progress.total > 0
-                        ? `${formatBytes(progress.current)} / ${formatBytes(progress.total)}`
-                        : 'Starting...'}
-                    </span>
-                  ) : null}
-                </div>
-                {progress?.isActive && !progress.imported && (
-                  <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{
-                        width: `${Math.max(progress.progress ?? 0, 2)}%`,
-                      }}
+              {/* Status circle */}
+              {progress?.imported ? (
+                <div className="size-[18px] rounded-full bg-[#4ADE80] flex items-center justify-center shrink-0">
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M3 8L7 12L13 4"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     />
-                  </div>
-                )}
-                {progress?.imported && (
-                  <p className="text-xs text-emerald-500">Ready</p>
-                )}
-              </div>
+                  </svg>
+                </div>
+              ) : isDownloading ? (
+                <div className="size-[18px] rounded-full bg-[#4ADE80] flex items-center justify-center shrink-0">
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M3 8L7 12L13 4"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              ) : (
+                <div
+                  className="size-[18px] rounded-full shrink-0"
+                  style={{ border: '1.5px solid #55555E' }}
+                />
+              )}
+
+              {/* Model name */}
+              <span className="text-[14px] font-medium text-white flex-1 min-w-0 truncate">
+                {name}
+              </span>
+
+              {/* Status text */}
+              {progress?.imported ? (
+                <span className="text-[13px] text-[#4ADE80] shrink-0">
+                  Complete
+                </span>
+              ) : isDownloading ? (
+                <span className="text-[13px] text-[#4ADE80] shrink-0">
+                  Downloading{progress.progress > 0 ? ` \u00B7 ${Math.round(progress.progress)}%` : ''}
+                </span>
+              ) : isQueued ? (
+                <span className="text-[13px] text-[#55555E] shrink-0">
+                  Queued
+                </span>
+              ) : null}
             </div>
           )
         })}
       </div>
 
-      <Button onClick={onFinish} className="w-full gap-2">
-        <IconMessageCircle className="size-4" />
-        {allDownloadsComplete ? 'Start chatting' : 'Start chatting'}
-      </Button>
+      {/* CTA */}
+      <button
+        onClick={onFinish}
+        className="w-full rounded-full py-3 px-8 text-[15px] font-semibold text-white cursor-pointer transition-colors"
+        style={{ backgroundColor: '#865EEA' }}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.backgroundColor = '#7A52D9')
+        }
+        onMouseLeave={(e) =>
+          (e.currentTarget.style.backgroundColor = '#865EEA')
+        }
+      >
+        Start chatting
+      </button>
     </div>
   )
+}
+
+// --- Small utility components ---
+
+function CompatibilityPill({
+  status,
+}: {
+  status: string | undefined
+}) {
+  if (!status || status === 'LOADING') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[10px] font-medium shrink-0"
+        style={{ backgroundColor: '#1A1A22', color: '#6E6E7A' }}
+      >
+        <span className="size-1 rounded-full bg-[#6E6E7A] animate-pulse" />
+        Checking
+      </span>
+    )
+  }
+
+  const config: Record<
+    string,
+    { label: string; dotColor: string; bgColor: string; textColor: string }
+  > = {
+    GREEN: {
+      label: 'Compatible',
+      dotColor: '#4ADE80',
+      bgColor: '#4ADE801A',
+      textColor: '#4ADE80',
+    },
+    YELLOW: {
+      label: 'Marginal',
+      dotColor: '#F59E0B',
+      bgColor: '#F59E0B1A',
+      textColor: '#F59E0B',
+    },
+    RED: {
+      label: 'Too large',
+      dotColor: '#EF4444',
+      bgColor: '#EF44441A',
+      textColor: '#EF4444',
+    },
+    GREY: {
+      label: 'Unknown',
+      dotColor: '#6E6E7A',
+      bgColor: '#1A1A22',
+      textColor: '#6E6E7A',
+    },
+  }
+
+  const c = config[status] || config.GREY
+  return (
+    <span
+      className="inline-flex items-center gap-[5px] rounded-full px-2 py-[3px] text-[10px] font-medium shrink-0"
+      style={{ backgroundColor: c.bgColor, color: c.textColor }}
+    >
+      <span
+        className="size-[5px] rounded-full shrink-0"
+        style={{ backgroundColor: c.dotColor }}
+      />
+      {c.label}
+    </span>
+  )
+}
+
+function TagIcon({ tag }: { tag: string }) {
+  switch (tag) {
+    case 'Text':
+    case 'Code':
+      return (
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M3 8L7 12L13 4"
+            stroke="#6E6E7A"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )
+    case 'Vision':
+      return (
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M2 8C2 8 5 4 8 4C11 4 14 8 14 8C14 8 11 12 8 12C5 12 2 8 2 8Z"
+            stroke="#6E6E7A"
+            strokeWidth="1.2"
+          />
+          <circle cx="8" cy="8" r="2" stroke="#6E6E7A" strokeWidth="1.2" />
+        </svg>
+      )
+    case 'Fast':
+    case 'Very fast':
+      return (
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+          <circle
+            cx="8"
+            cy="8"
+            r="5"
+            stroke="#6E6E7A"
+            strokeWidth="1.2"
+          />
+          <path
+            d="M8 5V8L10 10"
+            stroke="#6E6E7A"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+          />
+        </svg>
+      )
+    case 'Good reasoning':
+    case 'Strong reasoning':
+    case 'Advanced':
+      return (
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M4 12L8 4L12 12"
+            stroke="#6E6E7A"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M5.5 10H10.5"
+            stroke="#6E6E7A"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+          />
+        </svg>
+      )
+    default:
+      return null
+  }
 }
 
 export default SetupScreen

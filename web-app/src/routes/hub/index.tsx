@@ -27,7 +27,7 @@ import {
 import { useServiceHub } from '@/hooks/useServiceHub'
 import type { CatalogModel } from '@/services/models/types'
 import HeaderPage from '@/containers/HeaderPage'
-import { ChevronsUpDown, Loader } from 'lucide-react'
+import { ChevronsUpDown, ExternalLink, Loader } from 'lucide-react'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import Fuse from 'fuse.js'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
