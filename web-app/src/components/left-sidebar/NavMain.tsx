@@ -26,7 +26,7 @@ import {
   SettingsIcon,
   type SettingsIconHandle,
 } from '@/components/animated-icon/settings'
-import { BlocksIcon, type BlocksIconHandle } from '../animated-icon/blocks'
+import { Layers } from 'lucide-react'
 import {
   BotIcon,
   type BotIconHandle,
@@ -46,7 +46,6 @@ type AnimatedIconHandle =
   | FolderPlusIconHandle
   | MessageCircleIconHandle
   | SettingsIconHandle
-  | BlocksIconHandle
   | BotIconHandle
 
 type NavMainItem = {
@@ -93,7 +92,7 @@ const getNavMainItems = (
   {
     title: 'common:hub',
     url: route.hub.index,
-    animatedIcon: BlocksIcon,
+    icon: Layers,
   },
   {
     title: 'common:settings',
@@ -125,8 +124,6 @@ function NavMainItemWithAnimatedIcon({
       <SidebarMenuButton
         asChild={!!item.url}
         isActive={item.isActive}
-        onMouseEnter={() => iconRef.current?.startAnimation()}
-        onMouseLeave={() => iconRef.current?.stopAnimation()}
         onClick={item.onClick}
       >
         {item.url ? <Link to={item.url}>{content}</Link> : content}

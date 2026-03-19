@@ -39,7 +39,7 @@ import {
 import { useServiceHub } from '@/hooks/useServiceHub'
 import type { CatalogModel } from '@/services/models/types'
 import HeaderPage from '@/containers/HeaderPage'
-import { ChevronsUpDown, Loader } from 'lucide-react'
+import { ChevronsUpDown, ExternalLink, Loader } from 'lucide-react'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import Fuse from 'fuse.js'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -206,10 +206,10 @@ function HubContent() {
   const estimateSize = useCallback(
     (index: number) => {
       const model = filteredModels[index]
-      if (!model) return 100
+      if (!model) return 120
       // Base height + variants height if expanded
-      const baseHeight = 95
-      const variantHeight = 36
+      const baseHeight = 130
+      const variantHeight = 44
       const expanded = expandedModels[model.model_name]
       return expanded && (model.quants?.length ?? 0) > 1
         ? baseHeight + (model.quants?.length ?? 0) * variantHeight
@@ -358,7 +358,39 @@ function HubContent() {
     [modelSupportStatus, serviceHub]
   )
 
-  // Check if we're on the last step
+  // Helper to get default variant for a model
+  const getDefaultVariant = useCallback(
+    (model: CatalogModel) =>
+      model.quants?.find((m) =>
+        DEFAULT_MODEL_QUANTIZATIONS.some((e) =>
+          m.model_id.toLowerCase().includes(e)
+        )
+      ) ?? model.quants?.[0],
+    []
+  )
+
+  // Auto-check compatibility for visible models
+  useEffect(() => {
+    if (!filteredModels.length) return
+    const visibleItems = rowVirtualizer.getVirtualItems()
+    for (const item of visibleItems) {
+      const model = filteredModels[item.index]
+      if (!model || model.is_mlx) continue
+      const variant = getDefaultVariant(model)
+      if (variant && !modelSupportStatus[variant.model_id]) {
+        checkModelSupport(variant)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowVirtualizer.getVirtualItems().length, filteredModels.length])
+
+  // Format download count for display
+  const formatDownloads = useCallback((count: number) => {
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`
+    if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`
+    return String(count)
+  }, [])
+
   const renderFilter = () => {
     return (
       <>
@@ -559,299 +591,295 @@ function HubContent() {
                         paddingBottom: 8,
                       }}
                     >
-                      <Card
-                        header={
-                          <div className="flex items-center justify-between gap-x-2">
-                            <div
-                              className="cursor-pointer"
-                              onClick={() => {
-                                navigate({
-                                  to: route.hub.model,
-                                  params: {
-                                    modelId:
-                                      filteredModels[virtualItem.index]
-                                        .model_name,
-                                  },
-                                })
-                              }}
-                            >
-                              <h1
-                                className={cn(
-                                  'text-foreground font-medium text-base capitalize sm:max-w-none',
-                                  isRecommendedModel(
-                                    filteredModels[virtualItem.index]
-                                      .model_name
-                                  )
-                                    ? 'hub-model-card-step'
-                                    : ''
-                                )}
-                                title={
-                                  extractModelName(
-                                    filteredModels[virtualItem.index]
-                                      .model_name
-                                  ) || ''
-                                }
-                              >
-                                {extractModelName(
-                                  filteredModels[virtualItem.index].model_name
-                                ) || ''}
-                              </h1>
-                            </div>
-                            <div className="shrink-0 space-x-3 flex items-center">
-                              <span className="text-muted-foreground font-medium text-xs">
-                                {
-                                  (
-                                    filteredModels[
-                                      virtualItem.index
-                                    ].quants?.find((m) =>
-                                      DEFAULT_MODEL_QUANTIZATIONS.some((e) =>
-                                        m.model_id.toLowerCase().includes(e)
-                                      )
-                                    ) ??
-                                    filteredModels[virtualItem.index]
-                                      .quants?.[0]
-                                  )?.file_size
-                                }
-                              </span>
-                              <ModelInfoHoverCard
-                                model={filteredModels[virtualItem.index]}
-                                defaultModelQuantizations={
-                                  DEFAULT_MODEL_QUANTIZATIONS
-                                }
-                                variant={
-                                  filteredModels[
-                                    virtualItem.index
-                                  ].quants?.find((m) =>
-                                    DEFAULT_MODEL_QUANTIZATIONS.some((e) =>
-                                      m.model_id.toLowerCase().includes(e)
-                                    )
-                                  ) ??
-                                  filteredModels[virtualItem.index]
-                                    .quants?.[0]
-                                }
-                                isDefaultVariant={true}
-                                modelSupportStatus={modelSupportStatus}
-                                onCheckModelSupport={checkModelSupport}
-                              />
-                              {filteredModels[virtualItem.index].is_mlx ? (
-                                <MlxModelDownloadAction
-                                  model={filteredModels[virtualItem.index]}
-                                />
-                              ) : (
-                                <DownloadButtonPlaceholder
-                                  model={filteredModels[virtualItem.index]}
-                                  handleUseModel={handleUseModel}
-                                />
-                              )}
-                            </div>
-                          </div>
-                        }
-                      >
-                        <div className="line-clamp-2 mt-3 text-muted-foreground leading-normal">
-                          <RenderMarkdown
-                            className="select-none reset-heading"
-                            components={{
-                              a: ({ ...props }) => (
-                                <a
-                                  {...props}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                />
-                              ),
-                            }}
-                            content={
-                              extractDescription(
-                                filteredModels[virtualItem.index]?.description
-                              ) || ''
-                            }
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="capitalize text-foreground">
-                            {t('hub:by')}{' '}
-                            {filteredModels[virtualItem.index]?.developer}
-                          </span>
-                          <div className="flex items-center gap-4 ml-2">
-                            <div className="flex items-center gap-1">
-                              <IconDownload
-                                size={18}
-                                className="text-muted-foreground"
-                                title={t('hub:downloads')}
-                              />
-                              <span className="text-foreground">
-                                {filteredModels[virtualItem.index]
-                                  .downloads || 0}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <IconFileCode
-                                size={20}
-                                className="text-muted-foreground"
-                                title={t('hub:variants')}
-                              />
-                              <span className="text-foreground">
-                                {filteredModels[virtualItem.index].quants
-                                  ?.length || 0}
-                              </span>
-                            </div>
-                            <div className="flex gap-1.5 items-center">
-                              {(filteredModels[virtualItem.index].num_mmproj ?? 0) >
-                                0 && (
-                                <div className="flex items-center gap-1">
+                      {(() => {
+                        const model = filteredModels[virtualItem.index]
+                        const defaultVariant = getDefaultVariant(model)
+                        const supportStatus = defaultVariant
+                          ? modelSupportStatus[defaultVariant.model_id]
+                          : undefined
+                        const hfUrl = `https://huggingface.co/${model.model_name}`
+
+                        return (
+                          <Card
+                            header={
+                              <div className="flex items-center justify-between gap-x-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div
+                                    className="cursor-pointer min-w-0"
+                                    onClick={() => {
+                                      navigate({
+                                        to: route.hub.model,
+                                        params: { modelId: model.model_name },
+                                      })
+                                    }}
+                                  >
+                                    <h1
+                                      className={cn(
+                                        'text-foreground font-medium text-base capitalize truncate',
+                                        isRecommendedModel(model.model_name)
+                                          ? 'hub-model-card-step'
+                                          : ''
+                                      )}
+                                      title={extractModelName(model.model_name) || ''}
+                                    >
+                                      {extractModelName(model.model_name) || ''}
+                                    </h1>
+                                  </div>
+                                  {model.developer && (
+                                    <span className="text-xs text-muted-foreground shrink-0">
+                                      {t('hub:by')} {model.developer}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="shrink-0 flex items-center gap-2">
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <div>
-                                        <IconEye
-                                          size={17}
-                                          className="text-muted-foreground"
-                                        />
-                                      </div>
+                                      <a
+                                        href={hfUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center size-7 rounded-md hover:bg-secondary transition-colors"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="size-3.5 text-muted-foreground" />
+                                      </a>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                      <p>{t('vision')}</p>
+                                      <p>View on HuggingFace</p>
                                     </TooltipContent>
                                   </Tooltip>
+                                  <ModelInfoHoverCard
+                                    model={model}
+                                    defaultModelQuantizations={DEFAULT_MODEL_QUANTIZATIONS}
+                                    variant={defaultVariant}
+                                    isDefaultVariant={true}
+                                    modelSupportStatus={modelSupportStatus}
+                                    onCheckModelSupport={checkModelSupport}
+                                  />
+                                  {model.is_mlx ? (
+                                    <MlxModelDownloadAction model={model} />
+                                  ) : (
+                                    <DownloadButtonPlaceholder
+                                      model={model}
+                                      handleUseModel={handleUseModel}
+                                    />
+                                  )}
                                 </div>
-                              )}
-                              {filteredModels[virtualItem.index].tools && (
-                                <div className="flex items-center gap-1">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div>
-                                        <IconTool
-                                          size={17}
-                                          className="text-muted-foreground"
-                                        />
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>{t('tools')}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              )}
-                            </div>
-                            {(filteredModels[virtualItem.index].quants?.length ?? 0) >
-                              1 && (
-                              <div className="flex items-center gap-2 hub-show-variants-step">
-                                <Switch
-                                  checked={
-                                    !!expandedModels[
-                                      filteredModels[virtualItem.index]
-                                        .model_name
-                                    ]
-                                  }
-                                  onCheckedChange={() =>
-                                    toggleModelExpansion(
-                                      filteredModels[virtualItem.index]
-                                        .model_name
-                                    )
-                                  }
-                                />
-                                <p className="text-muted-foreground">
-                                  {t('hub:showVariants')}
-                                </p>
                               </div>
-                            )}
-                          </div>
-                        </div>
-                        {expandedModels[
-                          filteredModels[virtualItem.index].model_name
-                        ] &&
-                          (filteredModels[virtualItem.index].quants?.length ?? 0) >
-                            0 && (
-                            <div className="mt-5">
-                              {filteredModels[virtualItem.index].quants?.map(
-                                (variant) => (
-                                  <CardItem
-                                    key={variant.model_id}
-                                    title={
-                                      <>
-                                        <div className="flex items-center gap-1">
-                                          <span className="mr-2">
-                                            {variant.model_id}
-                                          </span>
-                                          {(filteredModels[virtualItem.index].num_mmproj ?? 0) > 0 && (
-                                            <div className="flex items-center gap-1">
-                                              <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                  <div>
-                                                    <IconEye
-                                                      size={17}
-                                                      className="text-muted-foreground"
-                                                    />
-                                                  </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                  <p>{t('vision')}</p>
-                                                </TooltipContent>
-                                              </Tooltip>
-                                            </div>
+                            }
+                          >
+                            {/* Compatibility + badges row */}
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              {/* Compatibility indicator */}
+                              {!model.is_mlx && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={cn(
+                                        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
+                                        supportStatus === 'GREEN' && 'bg-green-500/10 text-green-600 dark:text-green-400',
+                                        supportStatus === 'YELLOW' && 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+                                        supportStatus === 'RED' && 'bg-red-500/10 text-red-600 dark:text-red-400',
+                                        supportStatus === 'LOADING' && 'bg-muted text-muted-foreground',
+                                        !supportStatus && 'bg-muted text-muted-foreground'
+                                      )}
+                                    >
+                                      {supportStatus === 'LOADING' ? (
+                                        <Loader className="size-2.5 animate-spin" />
+                                      ) : (
+                                        <span
+                                          className={cn(
+                                            'size-1.5 rounded-full',
+                                            supportStatus === 'GREEN' && 'bg-green-500',
+                                            supportStatus === 'YELLOW' && 'bg-yellow-500',
+                                            supportStatus === 'RED' && 'bg-red-500',
+                                            !supportStatus && 'bg-muted-foreground'
                                           )}
-                                          {filteredModels[virtualItem.index]
-                                            .tools && (
-                                            <div className="flex items-center gap-1">
-                                              <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                  <div>
-                                                    <IconTool
-                                                      size={17}
-                                                      className="text-muted-foreground"
-                                                    />
-                                                  </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                  <p>{t('tools')}</p>
-                                                </TooltipContent>
-                                              </Tooltip>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </>
-                                    }
-                                    actions={
-                                      <div className="flex items-center gap-2">
-                                        <p className="text-muted-foreground font-medium text-xs">
-                                          {variant.file_size}
-                                        </p>
-                                        <ModelInfoHoverCard
-                                          model={
-                                            filteredModels[virtualItem.index]
-                                          }
-                                          variant={variant}
-                                          defaultModelQuantizations={
-                                            DEFAULT_MODEL_QUANTIZATIONS
-                                          }
-                                          modelSupportStatus={
-                                            modelSupportStatus
-                                          }
-                                          onCheckModelSupport={
-                                            checkModelSupport
-                                          }
                                         />
-                                        {filteredModels[virtualItem.index]
-                                          .is_mlx ? (
-                                          <MlxModelDownloadAction
-                                            model={
-                                              filteredModels[virtualItem.index]
-                                            }
-                                          />
-                                        ) : (
-                                          <ModelDownloadAction
-                                            variant={variant}
-                                            model={
-                                              filteredModels[virtualItem.index]
-                                            }
-                                          />
-                                        )}
-                                      </div>
+                                      )}
+                                      {supportStatus === 'GREEN' && 'Runs well'}
+                                      {supportStatus === 'YELLOW' && 'May be slow'}
+                                      {supportStatus === 'RED' && 'May not run'}
+                                      {supportStatus === 'LOADING' && 'Checking...'}
+                                      {!supportStatus && 'Checking...'}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {supportStatus === 'GREEN' && 'Recommended for your device'}
+                                    {supportStatus === 'YELLOW' && 'May be slow on your device'}
+                                    {supportStatus === 'RED' && 'May be incompatible with your device'}
+                                    {(supportStatus === 'LOADING' || !supportStatus) && 'Checking device compatibility...'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                              {/* Format badge */}
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-foreground">
+                                {model.is_mlx ? 'MLX' : 'GGUF'}
+                              </span>
+                              {/* File size */}
+                              {defaultVariant?.file_size && (
+                                <span className="text-xs text-muted-foreground">
+                                  {defaultVariant.file_size}
+                                </span>
+                              )}
+                              {/* Feature badges */}
+                              {(model.num_mmproj ?? 0) > 0 && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-foreground">
+                                      <IconEye size={12} />
+                                      Vision
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{t('vision')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                              {model.tools && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-secondary text-foreground">
+                                      <IconTool size={12} />
+                                      Tools
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{t('tools')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+
+                            {/* Description */}
+                            <div className="line-clamp-2 mt-2 text-muted-foreground text-sm leading-relaxed">
+                              <RenderMarkdown
+                                className="select-none reset-heading"
+                                components={{
+                                  a: ({ ...props }) => (
+                                    <a
+                                      {...props}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    />
+                                  ),
+                                }}
+                                content={extractDescription(model?.description) || ''}
+                              />
+                            </div>
+
+                            {/* Footer: stats + actions */}
+                            <div className="flex items-center justify-between mt-2">
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                  <IconDownload size={14} />
+                                  <span>{formatDownloads(model.downloads || 0)}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <IconFileCode size={14} />
+                                  <span>{model.quants?.length || 0} variants</span>
+                                </div>
+                              </div>
+                              {(model.quants?.length ?? 0) > 1 && (
+                                <div className="flex items-center gap-2 hub-show-variants-step">
+                                  <Switch
+                                    checked={!!expandedModels[model.model_name]}
+                                    onCheckedChange={() =>
+                                      toggleModelExpansion(model.model_name)
                                     }
                                   />
-                                )
+                                  <p className="text-xs text-muted-foreground">
+                                    {t('hub:showVariants')}
+                                  </p>
+                                </div>
                               )}
                             </div>
-                          )}
-                      </Card>
+
+                            {/* Expanded variants */}
+                            {expandedModels[model.model_name] &&
+                              (model.quants?.length ?? 0) > 0 && (
+                                <div className="mt-4 border-t border-border/40 pt-3">
+                                  {model.quants?.map((variant) => {
+                                    const variantStatus = modelSupportStatus[variant.model_id]
+                                    return (
+                                      <CardItem
+                                        key={variant.model_id}
+                                        title={
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-sm">
+                                              {variant.model_id}
+                                            </span>
+                                            {/* Inline compatibility dot for variant */}
+                                            {!model.is_mlx && (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <span
+                                                    className={cn(
+                                                      'size-2 rounded-full shrink-0',
+                                                      variantStatus === 'GREEN' && 'bg-green-500',
+                                                      variantStatus === 'YELLOW' && 'bg-yellow-500',
+                                                      variantStatus === 'RED' && 'bg-red-500',
+                                                      variantStatus === 'LOADING' && 'bg-muted-foreground animate-pulse',
+                                                      !variantStatus && 'bg-muted-foreground/40'
+                                                    )}
+                                                    onMouseEnter={() => checkModelSupport(variant)}
+                                                  />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  {variantStatus === 'GREEN' && 'Runs well on your device'}
+                                                  {variantStatus === 'YELLOW' && 'May be slow on your device'}
+                                                  {variantStatus === 'RED' && 'May not run on your device'}
+                                                  {(variantStatus === 'LOADING' || !variantStatus) && 'Hover to check compatibility'}
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            )}
+                                            {(model.num_mmproj ?? 0) > 0 && (
+                                              <IconEye size={14} className="text-muted-foreground" />
+                                            )}
+                                            {model.tools && (
+                                              <IconTool size={14} className="text-muted-foreground" />
+                                            )}
+                                          </div>
+                                        }
+                                        actions={
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-muted-foreground text-xs">
+                                              {variant.file_size}
+                                            </span>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <a
+                                                  href={`https://huggingface.co/${model.model_name}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="inline-flex items-center justify-center size-6 rounded-md hover:bg-secondary transition-colors"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <ExternalLink className="size-3 text-muted-foreground" />
+                                                </a>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>View on HuggingFace</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                            {model.is_mlx ? (
+                                              <MlxModelDownloadAction model={model} />
+                                            ) : (
+                                              <ModelDownloadAction
+                                                variant={variant}
+                                                model={model}
+                                              />
+                                            )}
+                                          </div>
+                                        }
+                                      />
+                                    )
+                                  })}
+                                </div>
+                              )}
+                          </Card>
+                        )
+                      })()}
                     </div>
                   ))}
                 </div>

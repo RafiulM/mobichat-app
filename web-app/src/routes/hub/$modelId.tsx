@@ -10,6 +10,8 @@ import {
   IconDownload,
   IconClock,
   IconFileCode,
+  IconEye,
+  IconTool,
 } from '@tabler/icons-react'
 import { route } from '@/constants/routes'
 import { useModelSources } from '@/hooks/useModelSources'
@@ -24,9 +26,14 @@ import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
-import { ModelInfoHoverCard } from '@/containers/ModelInfoHoverCard'
 import { DEFAULT_MODEL_QUANTIZATIONS } from '@/constants/models'
 import { useTranslation } from '@/i18n'
+import { ExternalLink, Loader } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 type SearchParams = {
   repo: string
@@ -175,6 +182,20 @@ function HubModelDetailContent() {
     [modelSupportStatus, serviceHub]
   )
 
+  // HuggingFace URL for this model
+  const hfUrl = `https://huggingface.co/${modelId}`
+
+  // Auto-check compatibility for all variants when model loads
+  useEffect(() => {
+    if (!modelData?.quants || modelData.is_mlx) return
+    for (const variant of modelData.quants) {
+      if (!modelSupportStatus[variant.model_id]) {
+        checkModelSupport(variant)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelData?.quants?.length])
+
   // Extract tags from quants (model variants)
   const tags = useMemo(() => {
     if (!modelData?.quants) return []
@@ -269,23 +290,32 @@ function HubModelDetailContent() {
           <div className="max-w-4xl mx-auto p-6">
             {/* Model Header */}
             <div className="mb-8">
-              <h1
-                className="text-2xl font-semibold mb-4 capitalize wrap-break-word line-clamp-2"
-                title={
-                  extractModelName(modelData.model_name) ||
-                  modelData.model_name
-                }
-              >
-                {extractModelName(modelData.model_name) ||
-                  modelData.model_name}
-              </h1>
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <h1
+                  className="text-2xl font-semibold capitalize wrap-break-word line-clamp-2"
+                  title={
+                    extractModelName(modelData.model_name) ||
+                    modelData.model_name
+                  }
+                >
+                  {extractModelName(modelData.model_name) ||
+                    modelData.model_name}
+                </h1>
+                <a
+                  href={hfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                >
+                  <ExternalLink className="size-3.5" />
+                  HuggingFace
+                </a>
+              </div>
 
               {/* Stats */}
               <div className="flex items-center gap-4 text-sm text-foreground mb-4 flex-wrap">
                 {modelData.developer && (
-                  <>
-                    <span>By {modelData.developer}</span>
-                  </>
+                  <span>By {modelData.developer}</span>
                 )}
                 <div className="flex items-center gap-2">
                   <IconDownload size={16} />
@@ -299,9 +329,36 @@ function HubModelDetailContent() {
                 )}
               </div>
 
+              {/* Feature + format badges */}
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-foreground">
+                  {modelData.is_mlx ? 'MLX' : 'GGUF'}
+                </span>
+                {(modelData.num_mmproj ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-foreground">
+                    <IconEye size={12} />
+                    Vision
+                  </span>
+                )}
+                {modelData.tools && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-foreground">
+                    <IconTool size={12} />
+                    Tools
+                  </span>
+                )}
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2.5 py-0.5 text-xs font-medium bg-secondary rounded-full"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
               {/* Description */}
               {modelData.description && (
-                <div className="text-muted-foreground mb-4">
+                <div className="text-muted-foreground">
                   <RenderMarkdown
                     className="select-none reset-heading"
                     components={{
@@ -320,20 +377,6 @@ function HubModelDetailContent() {
                   />
                 </div>
               )}
-
-              {/* Tags */}
-              {tags.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-3 py-1 text-sm bg-secondary rounded-md"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Variants Section */}
@@ -349,7 +392,7 @@ function HubModelDetailContent() {
                 <div className="w-full overflow-x-auto">
                   <table className="w-full min-w-[500px]">
                     <thead>
-                      <tr className="border-b ">
+                      <tr className="border-b">
                         <th className="text-left py-3 px-2 text-sm font-medium">
                           Version
                         </th>
@@ -359,7 +402,9 @@ function HubModelDetailContent() {
                         <th className="text-left py-3 px-2 text-sm font-medium">
                           Size
                         </th>
-                        <th></th>
+                        <th className="text-left py-3 px-2 text-sm font-medium">
+                          Compatibility
+                        </th>
                         <th className="text-right py-3 px-2 text-sm font-medium">
                           Action
                         </th>
@@ -379,6 +424,7 @@ function HubModelDetailContent() {
                         const isDownloaded = llamaProvider?.models.some(
                           (m: { id: string }) => m.id === variant.model_id
                         )
+                        const variantStatus = modelSupportStatus[variant.model_id]
 
                         // Extract format from model_id
                         const format = variant.model_id
@@ -414,16 +460,47 @@ function HubModelDetailContent() {
                                 {variant.file_size}
                               </span>
                             </td>
-                            <td>
-                              <ModelInfoHoverCard
-                                model={modelData}
-                                variant={variant}
-                                defaultModelQuantizations={
-                                  DEFAULT_MODEL_QUANTIZATIONS
-                                }
-                                modelSupportStatus={modelSupportStatus}
-                                onCheckModelSupport={checkModelSupport}
-                              />
+                            <td className="py-3 px-2">
+                              {!modelData.is_mlx && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={cn(
+                                        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
+                                        variantStatus === 'GREEN' && 'bg-green-500/10 text-green-600 dark:text-green-400',
+                                        variantStatus === 'YELLOW' && 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+                                        variantStatus === 'RED' && 'bg-red-500/10 text-red-600 dark:text-red-400',
+                                        (variantStatus === 'LOADING' || !variantStatus) && 'bg-muted text-muted-foreground'
+                                      )}
+                                    >
+                                      {variantStatus === 'LOADING' ? (
+                                        <Loader className="size-2.5 animate-spin" />
+                                      ) : (
+                                        <span
+                                          className={cn(
+                                            'size-1.5 rounded-full',
+                                            variantStatus === 'GREEN' && 'bg-green-500',
+                                            variantStatus === 'YELLOW' && 'bg-yellow-500',
+                                            variantStatus === 'RED' && 'bg-red-500',
+                                            !variantStatus && 'bg-muted-foreground'
+                                          )}
+                                        />
+                                      )}
+                                      {variantStatus === 'GREEN' && 'Runs well'}
+                                      {variantStatus === 'YELLOW' && 'May be slow'}
+                                      {variantStatus === 'RED' && 'May not run'}
+                                      {variantStatus === 'LOADING' && 'Checking...'}
+                                      {!variantStatus && 'Checking...'}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {variantStatus === 'GREEN' && 'Recommended for your device'}
+                                    {variantStatus === 'YELLOW' && 'May be slow on your device'}
+                                    {variantStatus === 'RED' && 'May be incompatible with your device'}
+                                    {(variantStatus === 'LOADING' || !variantStatus) && 'Checking device compatibility...'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                             </td>
                             <td className="py-3 px-2 text-right ml-auto">
                               {(() => {
