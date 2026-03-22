@@ -19,6 +19,99 @@ interface UseSpeechModeOptions {
   onSubmit: (text: string) => void
 }
 
+// Module-level singleton — preserves the MediaStream across component
+// remounts (route changes) so getUserMedia() is not re-triggered.
+const sharedHttpSttService = new HttpSpeechRecognitionService()
+
+// ── Module-level permission cache ────────────────────────────────────
+// Survives hook remounts (page navigation) so we never re-request
+// permissions that were already granted. Promise locks deduplicate
+// concurrent requests from multiple effects firing together.
+
+let micPermissionGranted =
+  typeof IS_TAURI !== 'undefined' && IS_TAURI &&
+  typeof IS_MACOS !== 'undefined' && IS_MACOS
+    ? localStorage.getItem('mic-permission-granted') === 'true' ||
+      localStorage.getItem('mic-helper-granted') === 'true'
+    : false
+
+let sttAuthGranted =
+  typeof IS_TAURI !== 'undefined' && IS_TAURI &&
+  typeof IS_MACOS !== 'undefined' && IS_MACOS
+    ? localStorage.getItem('stt-auth-granted') === 'true'
+    : false
+
+let micPermissionPromise: Promise<boolean> | null = null
+let sttAuthPromise: Promise<boolean> | null = null
+
+/**
+ * Ensure microphone permission is granted. Returns true if authorized.
+ * Deduplicates concurrent calls — only one IPC request in flight at a time.
+ */
+async function ensureMicPermission(): Promise<boolean> {
+  if (micPermissionGranted) return true
+  if (micPermissionPromise) return micPermissionPromise
+
+  micPermissionPromise = (async () => {
+    try {
+      const status = await invoke<string>('plugin:tts|get_microphone_status')
+      if (status === 'authorized') {
+        micPermissionGranted = true
+        try { localStorage.setItem('mic-permission-granted', 'true') } catch {}
+        return true
+      }
+      if (status !== 'not_determined') return false
+      const granted = await invoke<boolean>('plugin:tts|request_microphone_permission')
+      if (granted) {
+        micPermissionGranted = true
+        try { localStorage.setItem('mic-permission-granted', 'true') } catch {}
+      }
+      return granted
+    } catch (err) {
+      console.warn('[Speech] Mic permission check failed:', err)
+      return false
+    } finally {
+      micPermissionPromise = null
+    }
+  })()
+
+  return micPermissionPromise
+}
+
+/**
+ * Ensure speech recognition authorization is granted. Returns true if authorized.
+ * Same deduplication pattern as ensureMicPermission().
+ */
+async function ensureSttAuth(): Promise<boolean> {
+  if (sttAuthGranted) return true
+  if (sttAuthPromise) return sttAuthPromise
+
+  sttAuthPromise = (async () => {
+    try {
+      const status = await invoke<string>('plugin:tts|get_stt_authorization_status')
+      if (status === 'authorized') {
+        sttAuthGranted = true
+        try { localStorage.setItem('stt-auth-granted', 'true') } catch {}
+        return true
+      }
+      if (status !== 'not_determined') return false
+      const granted = await invoke<boolean>('plugin:tts|request_stt_authorization')
+      if (granted) {
+        sttAuthGranted = true
+        try { localStorage.setItem('stt-auth-granted', 'true') } catch {}
+      }
+      return granted
+    } catch (err) {
+      console.warn('[Speech] STT authorization check failed:', err)
+      return false
+    } finally {
+      sttAuthPromise = null
+    }
+  })()
+
+  return sttAuthPromise
+}
+
 interface UseSpeechModeReturn {
   isVoiceModeActive: boolean
   isOverlayOpen: boolean
@@ -71,7 +164,7 @@ export function useSpeechMode({
     new SpeechRecognitionService()
   )
   const httpSttServiceRef = useRef<HttpSpeechRecognitionService>(
-    new HttpSpeechRecognitionService()
+    sharedHttpSttService
   )
   const nativeSttServiceRef = useRef<NativeSpeechRecognitionService>(
     new NativeSpeechRecognitionService()
@@ -81,6 +174,17 @@ export function useSpeechMode({
    *  On subsequent calls we use restart() to skip permission checks and
    *  reuse the AVAudioEngine, avoiding mic indicator flicker. */
   const nativeEngineStartedRef = useRef(false)
+
+  /** Guards against concurrent startNativeListening calls — multiple effects
+   *  can fire close together (voice mode activation + chat ready), and we
+   *  must not issue duplicate permission requests while the first is pending. */
+  const nativeStartingRef = useRef(false)
+
+  /** Guards against concurrent startHttpListening calls — same race as native. */
+  const httpStartingRef = useRef(false)
+
+  // Permission caches are module-level (micPermissionGranted, sttAuthGranted)
+  // so they survive hook remounts. See ensureMicPermission() / ensureSttAuth().
 
   // ── Refs for text delta tracking ─────────────────────────────────────
 
@@ -287,22 +391,30 @@ export function useSpeechMode({
   }), [setSttState, setCurrentTranscript, setSttError])
 
   const startHttpListening = useCallback(async () => {
-    // On macOS, we must ensure native mic permission is granted BEFORE calling
-    // getUserMedia. The TCC prompt is modal and blocks WebKit's preflight check,
-    // so if getUserMedia fires while the native prompt is pending, it gets denied.
+    // Guard against concurrent calls — same pattern as startNativeListening
+    if (httpStartingRef.current) return
+    httpStartingRef.current = true
+
     try {
-      const granted = await invoke<boolean>('plugin:tts|request_microphone_permission')
+    // TTS server must be running for HTTP STT transcription
+    if (!useSpeechStore.getState().ttsServerPort) {
+      console.info('[Speech] HTTP STT waiting for TTS server')
+      return
+    }
+
+    // On macOS, ensure native mic permission is granted BEFORE calling
+    // getUserMedia. Uses the module-level deduplicating helper.
+    if (IS_TAURI && IS_MACOS) {
+      const granted = await ensureMicPermission()
       if (!granted) {
         console.warn('[Speech] Native mic permission not granted, getUserMedia may fail')
       }
-    } catch (err) {
-      console.warn('[Speech] Native mic permission request failed:', err)
     }
 
     setSttState('listening')
     setCurrentTranscript('')
 
-    httpSttServiceRef.current.start({
+    await httpSttServiceRef.current.start({
       onTranscript: (text: string, isFinal: boolean) => {
         setCurrentTranscript(text)
         if (isFinal && text.trim()) {
@@ -343,35 +455,35 @@ export function useSpeechMode({
         setSttState('error')
       },
     })
+    } finally {
+      httpStartingRef.current = false
+    }
   }, [setSttState, setCurrentTranscript, setSttError])
 
   const startNativeListening = useCallback(async () => {
+    // Guard against concurrent calls — multiple effects can fire together
+    if (nativeStartingRef.current) return
+    nativeStartingRef.current = true
+
+    try {
     const isRestart = nativeEngineStartedRef.current
 
     if (!isRestart) {
-      // First start — request both mic and speech recognition permissions
-      try {
-        await invoke<boolean>('plugin:tts|request_microphone_permission')
-      } catch (err) {
-        console.warn('[Speech] Mic permission request failed:', err)
+      // First start — request mic and speech recognition permissions via
+      // the module-level deduplicating helpers. These ensure only one IPC
+      // call is in flight even if multiple effects trigger concurrently.
+      const micGranted = await ensureMicPermission()
+      if (!micGranted) {
+        setSttError('Microphone access denied. Grant permission in System Settings → Privacy & Security → Microphone.')
+        setSttState('error')
+        return
       }
 
-      try {
-        const sttStatus = await invoke<string>('plugin:tts|get_stt_authorization_status')
-        if (sttStatus === 'not_determined') {
-          const granted = await invoke<boolean>('plugin:tts|request_stt_authorization')
-          if (!granted) {
-            setSttError('Speech recognition permission denied. Enable it in System Settings → Privacy & Security → Speech Recognition.')
-            setSttState('error')
-            return
-          }
-        } else if (sttStatus === 'denied' || sttStatus === 'restricted') {
-          setSttError('Speech recognition permission denied. Enable it in System Settings → Privacy & Security → Speech Recognition.')
-          setSttState('error')
-          return
-        }
-      } catch (err) {
-        console.warn('[Speech] STT authorization check failed:', err)
+      const sttGranted = await ensureSttAuth()
+      if (!sttGranted) {
+        setSttError('Speech recognition permission denied. Enable it in System Settings → Privacy & Security → Speech Recognition.')
+        setSttState('error')
+        return
       }
     }
 
@@ -418,6 +530,9 @@ export function useSpeechMode({
     } else {
       await nativeSttServiceRef.current.start(sttOptions)
       nativeEngineStartedRef.current = true
+    }
+    } finally {
+      nativeStartingRef.current = false
     }
   }, [setSttState, setCurrentTranscript, setSttError])
 
@@ -579,11 +694,15 @@ export function useSpeechMode({
         startListeningInternal()
       }
     } else {
-      // When voice mode is deactivated, stop everything
+      // When voice mode is deactivated, stop everything.
+      // Use cancelKeepStream for HTTP STT to preserve the MediaStream —
+      // avoids re-triggering getUserMedia dialogs when voice mode is toggled.
       sttServiceRef.current.cancel()
-      httpSttServiceRef.current.cancel()
+      httpSttServiceRef.current.cancelKeepStream()
       nativeSttServiceRef.current.cancel()
       nativeEngineStartedRef.current = false
+      nativeStartingRef.current = false
+      httpStartingRef.current = false
       setSttState('idle')
       setCurrentTranscript('')
 
@@ -596,11 +715,11 @@ export function useSpeechMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVoiceModeActive])
 
-  // ── Auto-start TTS server & request mic permission for HTTP STT (macOS) ──
+  // ── Auto-start TTS server for HTTP STT (macOS) ──
   // On macOS WKWebView, the Web Speech API is not available, so we use
   // HTTP STT which requires the TTS server (Whisper) to be running.
-  // We also need to request native microphone permission before getUserMedia
-  // will work, since WKWebView alone may not trigger the macOS TCC prompt.
+  // Mic permission is handled by startHttpListening() via ensureMicPermission()
+  // — no duplicate check here.
 
   useEffect(() => {
     if (!isVoiceModeActive || !useHttpStt) return
@@ -608,26 +727,14 @@ export function useSpeechMode({
     let cancelled = false
 
     ;(async () => {
-      // Step 1: Request native microphone permission (triggers macOS TCC dialog)
-      // This may fail silently in unsigned dev builds — that's OK, getUserMedia
-      // in WKWebView with macOSPrivateApi has its own permission flow.
-      try {
-        const granted = await invoke<boolean>(
-          'plugin:tts|request_microphone_permission'
-        )
-        if (!granted) {
-          console.warn(
-            '[Speech] Native mic permission denied (status was undetermined). ' +
-            'This is expected in dev builds. getUserMedia will handle permission.'
-          )
-          // Don't block — proceed to start TTS server and let getUserMedia try
-        }
-      } catch (err) {
-        console.warn('[Speech] Native mic permission request failed:', err)
-        // Continue anyway — getUserMedia might still work
+      // Ensure mic permission is granted before starting the TTS server.
+      // Uses the module-level deduplicating helper so concurrent effects
+      // won't trigger multiple TCC dialogs.
+      if (IS_TAURI && IS_MACOS) {
+        await ensureMicPermission()
       }
 
-      // Step 2: Start TTS server if not already running
+      // Start TTS server if not already running
       if (!ttsServerPort) {
         try {
           const running = await invoke<boolean>('plugin:tts|is_tts_running')
@@ -690,6 +797,9 @@ export function useSpeechMode({
   useEffect(() => {
     if (!isVoiceModeActive) return
     if (chatStatus !== 'ready') return
+    // Don't attempt HTTP STT before TTS server is ready — let the
+    // ttsServerPort watch effect (above) handle that case instead.
+    if (useHttpStt && !useNativeStt && !ttsServerPort) return
 
     const store = useSpeechStore.getState()
     if (store.ttsState === 'idle' && store.sttState === 'idle') {
@@ -707,7 +817,7 @@ export function useSpeechMode({
       }, 300)
       return () => clearTimeout(timer)
     }
-  }, [chatStatus, isVoiceModeActive, startListeningInternal])
+  }, [chatStatus, isVoiceModeActive, useHttpStt, useNativeStt, ttsServerPort, startListeningInternal])
 
   // ── Stop STT when chat starts streaming ──────────────────────────────
   // If the model starts responding, stop listening
@@ -731,9 +841,11 @@ export function useSpeechMode({
     return () => {
       isMountedRef.current = false
       sttServiceRef.current.cancel()
-      httpSttServiceRef.current.cancel()
+      httpSttServiceRef.current.cancelKeepStream()
       nativeSttServiceRef.current.cancel()
       nativeEngineStartedRef.current = false
+      nativeStartingRef.current = false
+      httpStartingRef.current = false
       audioPlayerRef.current.stop()
       ttsQueueRef.current = []
       isProcessingQueueRef.current = false
@@ -742,11 +854,15 @@ export function useSpeechMode({
 
   // Reset state when thread changes
   useEffect(() => {
-    // Stop any ongoing speech operations when switching threads
+    // Stop any ongoing speech operations when switching threads.
+    // Use cancelKeepStream for HTTP STT to preserve the MediaStream —
+    // avoids re-triggering getUserMedia permission dialogs on thread change.
     sttServiceRef.current.cancel()
-    httpSttServiceRef.current.cancel()
+    httpSttServiceRef.current.cancelKeepStream()
     nativeSttServiceRef.current.cancel()
     nativeEngineStartedRef.current = false
+    nativeStartingRef.current = false
+    httpStartingRef.current = false
     audioPlayerRef.current.stop()
     ttsQueueRef.current = []
     isProcessingQueueRef.current = false

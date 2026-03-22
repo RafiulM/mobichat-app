@@ -27,6 +27,7 @@ export const localStorageKey = {
   janModelPromptDismissed: 'jan-model-prompt-dismissed',
   agentMode: 'agent-mode',
   speechSettings: 'speech-settings',
+  thinkingMode: 'thinking-mode',
 }
 
 export const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24

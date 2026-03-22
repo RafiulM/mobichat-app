@@ -4,6 +4,10 @@
  * Used on macOS where the Web Speech API is not available in WKWebView.
  * Records audio via getUserMedia, detects silence, then sends the audio
  * to the TTS server's /stt/transcribe endpoint for Whisper transcription.
+ *
+ * The MediaStream is reused across recording cycles to avoid calling
+ * getUserMedia() on every restart, which would trigger repeated
+ * permission prompts in WKWebView.
  */
 
 import type { SpeechRecognitionState, SpeechRecognitionOptions } from './types'
@@ -31,6 +35,8 @@ export class HttpSpeechRecognitionService {
   private chunks: Blob[] = []
   private recordingStartTime = 0
   private recordingMimeType = ''
+  /** Guards against concurrent start() calls during async getUserMedia(). */
+  private isStarting = false
 
   static isSupported(): boolean {
     return !!(
@@ -46,13 +52,16 @@ export class HttpSpeechRecognitionService {
   }
 
   async start(options: SpeechRecognitionOptions): Promise<void> {
-    if (this.state === 'listening') return
+    if (this.state === 'listening' || this.isStarting) return
 
     if (!this.ttsClient) {
       options.onError('TTS server not connected — cannot transcribe')
       return
     }
 
+    this.isStarting = true
+
+    try {
     // Log availability for debugging
     console.info('[HTTP-STT] Checking APIs:', {
       mediaDevices: !!navigator.mediaDevices,
@@ -68,27 +77,31 @@ export class HttpSpeechRecognitionService {
     this.options = options
     this.chunks = []
 
-    try {
-      // Use simple constraints first — WKWebView may reject advanced constraints
-      // like sampleRate. We'll resample server-side if needed.
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      })
-    } catch (err) {
-      console.error('[HTTP-STT] getUserMedia failed:', err)
-      if (err instanceof DOMException) {
-        if (err.name === 'NotAllowedError' || err.name === 'NotFoundError') {
-          options.onError('not-allowed')
-          return
+    // Reuse existing MediaStream if still active to avoid repeated getUserMedia
+    // permission prompts in WKWebView. Only request a new stream if needed.
+    if (!this.mediaStream || !this.mediaStream.active) {
+      try {
+        // Use simple constraints first — WKWebView may reject advanced constraints
+        // like sampleRate. We'll resample server-side if needed.
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        })
+      } catch (err) {
+        console.error('[HTTP-STT] getUserMedia failed:', err)
+        if (err instanceof DOMException) {
+          if (err.name === 'NotAllowedError' || err.name === 'NotFoundError') {
+            options.onError('not-allowed')
+            return
+          }
         }
+        options.onError(
+          `Microphone error: ${err instanceof Error ? err.message : String(err)}`
+        )
+        return
       }
-      options.onError(
-        `Microphone error: ${err instanceof Error ? err.message : String(err)}`
-      )
-      return
     }
 
     this.state = 'listening'
@@ -128,7 +141,7 @@ export class HttpSpeechRecognitionService {
 
     this.mediaRecorder.onerror = (e) => {
       console.error('[HTTP-STT] MediaRecorder error:', e)
-      this.cleanup()
+      this.cleanupRecording()
       this.state = 'idle'
       this.options?.onError('Recording failed — MediaRecorder error')
     }
@@ -138,6 +151,9 @@ export class HttpSpeechRecognitionService {
 
     // Start silence detection
     this.startSilenceDetection()
+    } finally {
+      this.isStarting = false
+    }
   }
 
   stop(): void {
@@ -146,7 +162,7 @@ export class HttpSpeechRecognitionService {
       this.state = 'processing'
       this.mediaRecorder.stop()
     } else {
-      this.cleanup()
+      this.cleanupRecording()
       this.state = 'idle'
       this.options?.onEnd()
     }
@@ -155,10 +171,28 @@ export class HttpSpeechRecognitionService {
   cancel(): void {
     this.clearTimers()
     this.chunks = []
+    this.isStarting = false
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      // Remove onstop to prevent handleRecordingComplete from firing
+      this.mediaRecorder.onstop = null
       this.mediaRecorder.stop()
     }
-    this.cleanup()
+    this.cleanupFull()
+    this.state = 'idle'
+  }
+
+  /** Cancel recording but keep the MediaStream alive for reuse.
+   *  Used during thread changes where we want to stop listening
+   *  but avoid re-triggering getUserMedia on the next start(). */
+  cancelKeepStream(): void {
+    this.clearTimers()
+    this.chunks = []
+    this.isStarting = false
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      this.mediaRecorder.onstop = null
+      this.mediaRecorder.stop()
+    }
+    this.cleanupRecording()
     this.state = 'idle'
   }
 
@@ -203,7 +237,7 @@ export class HttpSpeechRecognitionService {
     this.clearTimers()
 
     if (this.chunks.length === 0 || !this.ttsClient) {
-      this.cleanup()
+      this.cleanupRecording()
       this.state = 'idle'
       this.options?.onEnd()
       return
@@ -227,7 +261,7 @@ export class HttpSpeechRecognitionService {
         `Transcription failed: ${err instanceof Error ? err.message : String(err)}`
       )
     } finally {
-      this.cleanup()
+      this.cleanupRecording()
       this.state = 'idle'
       this.options?.onEnd()
     }
@@ -248,17 +282,23 @@ export class HttpSpeechRecognitionService {
     }
   }
 
-  private cleanup(): void {
+  /** Clean up recording resources but KEEP the MediaStream alive for reuse. */
+  private cleanupRecording(): void {
     this.clearTimers()
     if (this.audioContext) {
       this.audioContext.close().catch(() => {})
       this.audioContext = null
       this.analyser = null
     }
+    this.mediaRecorder = null
+  }
+
+  /** Full cleanup including stopping the MediaStream (used on cancel). */
+  private cleanupFull(): void {
+    this.cleanupRecording()
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach((t) => t.stop())
       this.mediaStream = null
     }
-    this.mediaRecorder = null
   }
 }

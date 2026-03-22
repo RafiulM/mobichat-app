@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
+import { DownloadProgress } from '@/components/DownloadProgress'
 import { route } from '@/constants/routes'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -82,24 +82,13 @@ export const ModelDownloadAction = ({
   const isDownloading =
     localDownloadingModels.has(variant.model_id) ||
     downloadProcesses.some((e) => e.id === variant.model_id)
-  const downloadProgress =
-    downloadProcesses.find((e) => e.id === variant.model_id)?.progress || 0
   const isDownloaded = useModelProvider
     .getState()
     .getProviderByName('llamacpp')
     ?.models.some((m: { id: string }) => m.id === variant.model_id)
 
   if (isDownloading) {
-    return (
-      <>
-        <div className="flex items-center gap-2 w-20">
-          <Progress className="border" value={downloadProgress * 100} />
-          <span className="text-xs text-center text-muted-foreground">
-            {Math.round(downloadProgress * 100)}%
-          </span>
-        </div>
-      </>
-    )
+    return <DownloadProgress modelId={variant.model_id} variant="compact" />
   }
 
   if (isDownloaded) {

@@ -22,11 +22,10 @@ import { useModelProvider } from '@/hooks/useModelProvider'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import type { CatalogModel, ModelQuant } from '@/services/models/types'
-import { Progress } from '@/components/ui/progress'
+import { DownloadProgress } from '@/components/DownloadProgress'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
-import { DEFAULT_MODEL_QUANTIZATIONS } from '@/constants/models'
 import { useTranslation } from '@/i18n'
 import { ExternalLink, Loader } from 'lucide-react'
 import {
@@ -417,10 +416,6 @@ function HubModelDetailContent() {
                           downloadProcesses.some(
                             (e) => e.id === variant.model_id
                           )
-                        const downloadProgress =
-                          downloadProcesses.find(
-                            (e) => e.id === variant.model_id
-                          )?.progress || 0
                         const isDownloaded = llamaProvider?.models.some(
                           (m: { id: string }) => m.id === variant.model_id
                         )
@@ -506,15 +501,10 @@ function HubModelDetailContent() {
                               {(() => {
                                 if (isDownloading && !isDownloaded) {
                                   return (
-                                    <div className="flex items-center justify-end gap-2">
-                                      <Progress
-                                        value={downloadProgress * 100}
-                                        className="w-12"
-                                      />
-                                      <span className="text-xs text-muted-foreground text-right">
-                                        {Math.round(downloadProgress * 100)}%
-                                      </span>
-                                    </div>
+                                    <DownloadProgress
+                                      modelId={variant.model_id}
+                                      variant="expanded"
+                                    />
                                   )
                                 }
 

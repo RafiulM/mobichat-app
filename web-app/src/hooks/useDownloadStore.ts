@@ -6,6 +6,8 @@ export interface DownloadProgressProps {
   name: string
   current: number
   total: number
+  speed: number
+  lastUpdated: number
 }
 
 // Zustand store for thinking block state
@@ -38,18 +40,34 @@ export const useDownloadStore = create<DownloadState>((set) => ({
     }),
 
   updateProgress: (id, progress, name, current, total) =>
-    set((state) => ({
-      downloads: {
-        ...state.downloads,
-        [id]: {
-          ...state.downloads[id],
-          name: name || state.downloads[id]?.name || '',
-          progress,
-          current: current || state.downloads[id]?.current || 0,
-          total: total || state.downloads[id]?.total || 0,
+    set((state) => {
+      const prev = state.downloads[id]
+      const now = Date.now()
+      const prevCurrent = prev?.current || 0
+      const prevTime = prev?.lastUpdated || now
+      const timeDelta = (now - prevTime) / 1000
+      const bytesDelta = (current || 0) - prevCurrent
+      const speed =
+        timeDelta > 0 && bytesDelta > 0
+          ? bytesDelta / timeDelta
+          : prev?.speed || 0
+
+      return {
+        downloads: {
+          ...state.downloads,
+          [id]: {
+            ...prev,
+            id,
+            name: name || prev?.name || '',
+            progress,
+            current: current || prev?.current || 0,
+            total: total || prev?.total || 0,
+            speed,
+            lastUpdated: now,
+          },
         },
-      },
-    })),
+      }
+    }),
 
   addLocalDownloadingModel: (modelId: string) =>
     set((state) => ({

@@ -51,7 +51,6 @@ import {
 import { localStorageKey } from '@/constants/localStorage'
 import { defaultModel } from '@/lib/models'
 import { useAssistant } from '@/hooks/useAssistant'
-import { AvatarEmoji } from '@/containers/AvatarEmoji'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTools } from '@/hooks/useTools'
 import { TokenCounter } from '@/components/TokenCounter'
@@ -85,6 +84,7 @@ import JanBrowserExtensionDialog from '@/containers/dialogs/JanBrowserExtensionD
 import { useJanBrowserExtension } from '@/hooks/useJanBrowserExtension'
 import { PromptVisionModel } from '@/containers/PromptVisionModel'
 import { useAgentMode } from '@/hooks/useAgentMode'
+import { useThinkingMode } from '@/hooks/useThinkingMode'
 import { isOpenClawRunning } from '@/utils/openclaw'
 import { VoiceIndicator } from '@/components/VoiceIndicator'
 
@@ -137,10 +137,6 @@ const ChatInput = memo(function ChatInput({
   const prompt = usePrompt((state) => state.prompt)
   const setPrompt = usePrompt((state) => state.setPrompt)
   const currentThreadId = useThreads((state) => state.currentThreadId)
-  const currentThread = useThreads((state) => state.getCurrentThread())
-  const updateCurrentThreadAssistant = useThreads(
-    (state) => state.updateCurrentThreadAssistant
-  )
   const updateCurrentThreadModel = useThreads(
     (state) => state.updateCurrentThreadModel
   )
@@ -174,6 +170,17 @@ const ChatInput = memo(function ChatInput({
   const handleAgentToggle = useCallback(() => {
     toggleAgentMode(agentModeKey)
   }, [agentModeKey, toggleAgentMode])
+
+  // Thinking mode
+  const thinkingModeKey = currentThreadId ?? TEMPORARY_CHAT_ID
+  const isThinkingEnabled = useThinkingMode((state) =>
+    state.thinkingThreads[thinkingModeKey] === true
+  )
+  const toggleThinking = useThinkingMode((state) => state.toggleThinking)
+
+  const handleThinkingToggle = useCallback(() => {
+    toggleThinking(thinkingModeKey)
+  }, [thinkingModeKey, toggleThinking])
 
   // Get current thread messages for token counting
   const threadMessages = useMessages(
@@ -402,6 +409,11 @@ const ChatInput = memo(function ChatInput({
           useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, true)
           useAgentMode.getState().removeThread(agentModeKey)
         }
+        // Transfer thinking mode from home screen to temporary thread
+        if (isThinkingEnabled && thinkingModeKey !== TEMPORARY_CHAT_ID) {
+          useThinkingMode.getState().setThinking(TEMPORARY_CHAT_ID, true)
+          useThinkingMode.getState().removeThread(thinkingModeKey)
+        }
         router.navigate({
           to: route.threadsDetail,
           params: { threadId: TEMPORARY_CHAT_ID },
@@ -454,6 +466,11 @@ const ChatInput = memo(function ChatInput({
         if (isAgentMode) {
           useAgentMode.getState().setAgentMode(newThread.id, true)
           useAgentMode.getState().removeThread(agentModeKey)
+        }
+        // Transfer thinking mode from home screen to the new thread
+        if (isThinkingEnabled) {
+          useThinkingMode.getState().setThinking(newThread.id, true)
+          useThinkingMode.getState().removeThread(thinkingModeKey)
         }
 
         // Store the initial message for the new thread
@@ -1625,9 +1642,9 @@ const ChatInput = memo(function ChatInput({
                           : 'Add documents or files'}
                       </span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <IconBulb size={18} className="text-muted-foreground" />
-                      <span>Thinking</span>
+                    <DropdownMenuItem onClick={handleThinkingToggle}>
+                      <IconBulb size={18} className={cn('text-muted-foreground', isThinkingEnabled && 'text-primary')} />
+                      <span>{isThinkingEnabled ? 'Thinking (On)' : 'Thinking'}</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem>
                       <IconFlask size={18} className="text-muted-foreground" />
@@ -1639,6 +1656,33 @@ const ChatInput = memo(function ChatInput({
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                )}
+                {/* Thinking mode toggle */}
+                {!effectiveAgentMode && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={handleThinkingToggle}
+                      className={cn(
+                        'rounded-full mb-1',
+                        isThinkingEnabled && 'text-primary bg-primary/10 hover:bg-primary/20'
+                      )}
+                    >
+                      <IconBulb
+                        size={18}
+                        className={cn(
+                          'text-muted-foreground',
+                          isThinkingEnabled && 'text-primary'
+                        )}
+                      />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isThinkingEnabled ? 'Disable thinking' : 'Thinking'}</p>
+                  </TooltipContent>
+                </Tooltip>
                 )}
                 {/* Web search toggle */}
                 <Tooltip>

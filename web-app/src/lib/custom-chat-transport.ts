@@ -16,6 +16,7 @@ import { ModelFactory } from './model-factory'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useAssistant } from '@/hooks/useAssistant'
 import { useAgentMode } from '@/hooks/useAgentMode'
+import { useThinkingMode } from '@/hooks/useThinkingMode'
 import { getOpenClawAuthToken, ensureOpenClawHttpApi, checkOpenClawGateway, OPENCLAW_GATEWAY_URL } from '@/utils/openclaw'
 import { useThreads } from '@/hooks/useThreads'
 import { useAttachments } from '@/hooks/useAttachments'
@@ -421,6 +422,29 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     const modelSupportsTools = selectedModel?.capabilities?.includes('tools') ?? this.modelSupportsTools
     const shouldEnableTools = !isAgentMode && hasTools && modelSupportsTools
 
+    // Check if thinking mode is enabled for this thread
+    const isThinkingEnabled = this.threadId
+      ? useThinkingMode.getState().isThinkingEnabled(this.threadId)
+      : false
+
+    // Build provider options for thinking/extended thinking
+    const providerOptions = (() => {
+      if (!isThinkingEnabled || isAgentMode) return undefined
+
+      if (effectiveProviderName === 'anthropic') {
+        return {
+          anthropic: {
+            thinking: {
+              type: 'enabled' as const,
+              budgetTokens: 10000,
+            },
+          },
+        }
+      }
+
+      return undefined
+    })()
+
     // Track stream timing and token count for token speed calculation
     let streamStartTime: number | undefined
 
@@ -431,6 +455,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       tools: shouldEnableTools ? this.tools : undefined,
       toolChoice: shouldEnableTools ? 'auto' : undefined,
       system: this.systemMessage,
+      providerOptions,
     })
 
     let tokensPerSecond = 0
@@ -549,12 +574,33 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       },
     })
 
+    // When thinking is disabled, filter out reasoning chunks from the UI stream
+    // so that reasoning content from local models (which always extract <think> tags)
+    // is not displayed to the user.
+    const reasoningFilteredStream = isThinkingEnabled
+      ? uiStream
+      : uiStream.pipeThrough(
+          new TransformStream<UIMessageChunk, UIMessageChunk>({
+            transform(chunk, controller) {
+              const chunkType = (chunk as { type: string }).type
+              if (
+                chunkType === 'reasoning-start' ||
+                chunkType === 'reasoning-delta' ||
+                chunkType === 'reasoning-end'
+              ) {
+                return
+              }
+              controller.enqueue(chunk)
+            },
+          })
+        )
+
     // When continuing a truncated response, inject the partial content as the
     // very first text-delta so the new message immediately shows it and the
     // user sees a seamless continuation rather than an empty box.
     const finalStream = continueContent
-      ? prependTextDeltaToUIStream(uiStream, continueContent)
-      : uiStream
+      ? prependTextDeltaToUIStream(reasoningFilteredStream, continueContent)
+      : reasoningFilteredStream
 
     // In agent mode, detect empty responses (HTTP 200 but no text content)
     // and inject an error chunk so the UI shows a message instead of an empty bubble.

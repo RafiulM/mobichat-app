@@ -36,23 +36,39 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 
             #[cfg(target_os = "macos")]
             {
-                // Request microphone permission on app startup.
-                // In production .app builds this triggers the TCC dialog.
+                // Request microphone and speech recognition permissions on app
+                // startup so that voice mode can start without any TCC dialogs.
+                // In production .app builds this triggers the TCC dialog(s).
                 // In dev builds (non-bundled binary) this silently fails —
                 // the user can use the Settings → Speech → Grant Access button
                 // which launches a helper .app to trigger the TCC dialog.
                 std::thread::spawn(|| {
-                    let status = unsafe { commands::mic_authorization_status() };
+                    // Microphone permission (AVCaptureDevice)
+                    let mic_status = unsafe { commands::mic_authorization_status() };
                     log::info!(
                         "[tts] Microphone auth status at startup: {} (0=undetermined, 1=authorized, 2=denied, 3=restricted)",
-                        status
+                        mic_status
                     );
-                    if status == 0 {
-                        // Not yet determined — trigger the system dialog
+                    if mic_status == 0 {
                         log::info!("[tts] Requesting microphone permission...");
                         let granted = unsafe { commands::request_mic_access() };
                         log::info!(
                             "[tts] Microphone permission result: {}",
+                            if granted { "GRANTED" } else { "DENIED" }
+                        );
+                    }
+
+                    // Speech recognition authorization (SFSpeechRecognizer)
+                    let stt_status = unsafe { commands::stt_authorization_status() };
+                    log::info!(
+                        "[tts] STT auth status at startup: {} (0=undetermined, 1=authorized, 2=denied, 3=restricted)",
+                        stt_status
+                    );
+                    if stt_status == 0 {
+                        log::info!("[tts] Requesting speech recognition authorization...");
+                        let granted = unsafe { commands::stt_request_authorization() };
+                        log::info!(
+                            "[tts] STT authorization result: {}",
                             if granted { "GRANTED" } else { "DENIED" }
                         );
                     }

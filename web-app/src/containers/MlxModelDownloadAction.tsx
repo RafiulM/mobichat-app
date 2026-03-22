@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
+import { DownloadProgress } from '@/components/DownloadProgress'
 import { route } from '@/constants/routes'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -49,9 +49,6 @@ export const MlxModelDownloadAction = memo(({ model }: { model: CatalogModel }) 
   const isDownloading =
     localDownloadingModels.has(modelId) ||
     downloadProcesses.some((e) => e.id === modelId)
-
-  const downloadProgress =
-    downloadProcesses.find((e) => e.id === modelId)?.progress || 0
 
   // Check if MLX model is already downloaded
   useEffect(() => {
@@ -160,12 +157,7 @@ export const MlxModelDownloadAction = memo(({ model }: { model: CatalogModel }) 
   return (
     <div className="flex items-center">
       {isDownloading && !isDownloaded && (
-        <div className="flex items-center gap-2 w-20">
-          <Progress className="border" value={downloadProgress * 100} />
-          <span className="text-xs text-center text-muted-foreground">
-            {Math.round(downloadProgress * 100)}%
-          </span>
-        </div>
+        <DownloadProgress modelId={modelId} variant="compact" />
       )}
       {isDownloaded ? (
         <Button

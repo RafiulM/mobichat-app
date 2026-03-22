@@ -122,17 +122,27 @@ extern "C" fn stt_callback(
 /// from the app process, triggering the system TCC permission dialog so the
 /// app appears in System Settings → Privacy & Security → Microphone.
 /// Returns `true` if access was granted, `false` if denied.
+///
+/// Short-circuits if permission is already authorized or denied — only
+/// triggers the TCC dialog when status is "not determined".
 #[tauri::command]
 pub async fn request_microphone_permission() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
         let result = tokio::task::spawn_blocking(|| {
             let status = unsafe { mic_authorization_status() };
-            log::info!(
-                "[tts] Microphone authorization status: {} (0=undetermined, 1=authorized, 2=denied, 3=restricted)",
-                status
-            );
-
+            match status {
+                1 => {
+                    // Already authorized — no need to call request_mic_access()
+                    return true;
+                }
+                2 | 3 => {
+                    // Denied or restricted — can't re-prompt
+                    return false;
+                }
+                _ => {}
+            }
+            log::info!("[tts] Microphone status is undetermined, requesting permission...");
             let granted = unsafe { request_mic_access() };
             log::info!("[tts] Microphone permission result: {}", if granted { "granted" } else { "denied" });
             granted
@@ -759,11 +769,26 @@ pub async fn get_stt_authorization_status() -> Result<String, String> {
 }
 
 /// Request speech recognition authorization. Shows TCC dialog if not yet determined.
+///
+/// Short-circuits if authorization is already granted or denied.
 #[tauri::command]
 pub async fn request_stt_authorization() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
         let result = tokio::task::spawn_blocking(|| {
+            let status = unsafe { stt_authorization_status() };
+            match status {
+                1 => {
+                    // Already authorized
+                    return true;
+                }
+                2 | 3 => {
+                    // Denied or restricted
+                    return false;
+                }
+                _ => {}
+            }
+            log::info!("[stt] STT status is undetermined, requesting authorization...");
             let granted = unsafe { stt_request_authorization() };
             log::info!(
                 "[stt] Speech recognition authorization result: {}",
