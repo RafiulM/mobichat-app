@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { extractModelName, extractDescription } from '@/lib/models'
+import { extractDescription } from '@/lib/models'
 import { IconDownload, IconEye, IconTool } from '@tabler/icons-react'
 import { Loader } from 'lucide-react'
 import { DownloadButtonPlaceholder } from '@/containers/DownloadButton'

@@ -233,7 +233,7 @@ export function useTtsSettings() {
     } catch (err) {
       console.error('Failed to start TTS server:', err)
       setServerStatus('error')
-      setServerError(err instanceof Error ? err.message : String(err))
+      setServerError(formatError(err))
     }
   }, [setTtsServerPort])
 

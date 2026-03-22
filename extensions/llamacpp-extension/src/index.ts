@@ -1227,11 +1227,20 @@ export default class llamacpp_extension extends AIEngine {
         const onProgress = (transferred: number, total: number) => {
           events.emit(DownloadEvent.onFileDownloadUpdate, {
             modelId,
-            percent: transferred / total,
+            percent: total > 0 ? transferred / total : 0,
             size: { transferred, total },
             downloadType: 'Model',
           })
         }
+
+        // Emit initial event so UI shows download started immediately
+        events.emit(DownloadEvent.onFileDownloadUpdate, {
+          modelId,
+          percent: 0,
+          size: { transferred: 0, total: 0 },
+          downloadType: 'Model',
+        })
+
         const downloadManager = window.core.extensionManager.getByName(
           '@janhq/download-extension'
         )

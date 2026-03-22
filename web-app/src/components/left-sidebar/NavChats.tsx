@@ -150,7 +150,6 @@ export function NavChats() {
   const threads = useThreads((state) => state.threads)
   const deleteAllThreads = useThreads((state) => state.deleteAllThreads)
   const { folders, updateFolder } = useThreadManagement()
-  const navigate = useNavigate()
   const [dropdownOpen, setDropdownOpen] = useState(false)
 
   const [editDialogOpen, setEditDialogOpen] = useState(false)

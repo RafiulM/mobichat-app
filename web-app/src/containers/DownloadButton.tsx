@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
+import { DownloadProgress } from '@/components/DownloadProgress'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useModelProvider } from '@/hooks/useModelProvider'
@@ -101,9 +101,6 @@ export function DownloadButtonPlaceholder({
     localDownloadingModels.has(modelId) ||
     downloadProcesses.some((e) => e.id === modelId)
 
-  const downloadProgress =
-    downloadProcesses.find((e) => e.id === modelId)?.progress || 0
-
   const isRecommended = isRecommendedModel(model.model_name)
 
   const handleDownload = async () => {
@@ -127,12 +124,7 @@ export function DownloadButtonPlaceholder({
       )}
     >
       {isDownloading && !isDownloaded && (
-        <div className={cn('flex items-center gap-2 w-20')}>
-          <Progress className='border' value={downloadProgress * 100} />
-          <span className="text-xs text-center text-muted-foreground">
-            {Math.round(downloadProgress * 100)}%
-          </span>
-        </div>
+        <DownloadProgress modelId={modelId} variant="compact" />
       )}
       {isDownloaded ? (
         <Button

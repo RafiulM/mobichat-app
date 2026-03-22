@@ -5,7 +5,7 @@ import { localStorageKey } from '@/constants/localStorage'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEffect, useMemo, useCallback, useState, useRef } from 'react'
-import { AppEvent, events } from '@janhq/core'
+import { AppEvent, DownloadEvent, DownloadState, events } from '@janhq/core'
 import { cn, formatMegaBytes } from '@/lib/utils'
 import { useHardware } from '@/hooks/useHardware'
 import { useModelSources } from '@/hooks/useModelSources'
@@ -86,11 +86,21 @@ function getDisplayName(model: CatalogModel) {
     .replace(/-gguf$/i, '')
 }
 
-function SetupScreen() {
+function SetupScreen({
+  onSetupComplete,
+}: {
+  onSetupComplete?: () => void
+}) {
   const navigate = useNavigate()
   const { selectModelProvider, setProviders } = useModelProvider()
-  const { downloads, localDownloadingModels, addLocalDownloadingModel } =
-    useDownloadStore()
+  const {
+    downloads,
+    localDownloadingModels,
+    addLocalDownloadingModel,
+    updateProgress,
+    removeDownload,
+    removeLocalDownloadingModel,
+  } = useDownloadStore()
   const serviceHub = useServiceHub()
   const { hardwareData, systemUsage } = useHardware()
   const huggingfaceToken = useGeneralSetting((state) => state.huggingfaceToken)
@@ -358,9 +368,48 @@ function SetupScreen() {
     }
   }, [serviceHub, setProviders])
 
+  // Listen for download progress events (DownloadManagement is not mounted during setup)
+  useEffect(() => {
+    const onFileDownloadUpdate = (state: DownloadState) => {
+      updateProgress(
+        state.modelId,
+        state.percent,
+        state.modelId,
+        state.size?.transferred,
+        state.size?.total
+      )
+    }
+
+    const onFileDownloadDone = (state: DownloadState) => {
+      removeDownload(state.modelId)
+      removeLocalDownloadingModel(state.modelId)
+    }
+
+    events.on(DownloadEvent.onFileDownloadUpdate, onFileDownloadUpdate)
+    events.on(DownloadEvent.onFileDownloadError, onFileDownloadDone)
+    events.on(DownloadEvent.onFileDownloadSuccess, onFileDownloadDone)
+    events.on(DownloadEvent.onFileDownloadStopped, onFileDownloadDone)
+    events.on(
+      DownloadEvent.onFileDownloadAndVerificationSuccess,
+      onFileDownloadDone
+    )
+
+    return () => {
+      events.off(DownloadEvent.onFileDownloadUpdate, onFileDownloadUpdate)
+      events.off(DownloadEvent.onFileDownloadError, onFileDownloadDone)
+      events.off(DownloadEvent.onFileDownloadSuccess, onFileDownloadDone)
+      events.off(DownloadEvent.onFileDownloadStopped, onFileDownloadDone)
+      events.off(
+        DownloadEvent.onFileDownloadAndVerificationSuccess,
+        onFileDownloadDone
+      )
+    }
+  }, [updateProgress, removeDownload, removeLocalDownloadingModel])
+
   // Finish setup and navigate home
   const finishSetup = useCallback(() => {
     localStorage.setItem(localStorageKey.setupCompleted, 'true')
+    onSetupComplete?.()
 
     const firstImported = selectedModelDetails.find((m) =>
       importedModelsRef.current.has(m.variant.model_id)
@@ -384,13 +433,14 @@ function SetupScreen() {
     } else {
       navigate({ to: route.home, replace: true })
     }
-  }, [selectedModelDetails, selectModelProvider, navigate])
+  }, [selectedModelDetails, selectModelProvider, navigate, onSetupComplete])
 
   // Skip setup
   const skipSetup = useCallback(() => {
     localStorage.setItem(localStorageKey.setupCompleted, 'true')
+    onSetupComplete?.()
     navigate({ to: route.home, replace: true })
-  }, [navigate])
+  }, [navigate, onSetupComplete])
 
   // System specs data
   const specs = useMemo(

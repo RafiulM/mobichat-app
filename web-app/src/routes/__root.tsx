@@ -21,7 +21,7 @@ import ToolApproval from '@/containers/dialogs/ToolApproval'
 import { TranslationProvider } from '@/i18n/TranslationContext'
 import OutOfContextPromiseModal from '@/containers/dialogs/OutOfContextDialog'
 import AttachmentIngestionDialog from '@/containers/dialogs/AttachmentIngestionDialog'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import GlobalError from '@/containers/GlobalError'
 import { invoke } from '@tauri-apps/api/core'
 import { useSpeechStore } from '@/stores/speech-store'
@@ -51,8 +51,13 @@ const AppLayout = () => {
   } = useLeftPanel()
 
   const { providers } = useModelProvider()
-  const setupCompleted =
-    localStorage.getItem(localStorageKey.setupCompleted) === 'true'
+  const [setupCompleted, setSetupCompleted] = useState(
+    () => localStorage.getItem(localStorageKey.setupCompleted) === 'true'
+  )
+
+  const handleSetupComplete = useCallback(() => {
+    setSetupCompleted(true)
+  }, [])
 
   // Check if user has any valid providers (same logic as useJanModelPrompt)
   const hasValidProviders = providers.some((provider) => {
@@ -80,7 +85,7 @@ const AppLayout = () => {
             data-tauri-drag-region
           />
         )}
-        <SetupScreen />
+        <SetupScreen onSetupComplete={handleSetupComplete} />
       </div>
     )
   }

@@ -5,8 +5,8 @@ import {
 } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
+import { useDownloadActions } from '@/hooks/useDownloadActions'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
-import { useServiceHub } from '@/hooks/useServiceHub'
 import { DownloadEvent, DownloadState, events, AppEvent } from '@janhq/core'
 import { IconX } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -16,12 +16,13 @@ import { useNavigate } from '@tanstack/react-router'
 import { route } from '@/constants/routes'
 import { DownloadIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { renderGB } from '@/lib/download-utils'
 
 export function DownloadManagement() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
-  const serviceHub = useServiceHub()
+  const { cancelDownload } = useDownloadActions()
   const {
     downloads,
     updateProgress,
@@ -352,10 +353,6 @@ export function DownloadManagement() {
     onAppUpdateDownloadError,
   ])
 
-  function renderGB(bytes: number): string {
-    const gb = bytes / 1024 ** 3
-    return ((gb * 100) / 100).toFixed(2)
-  }
 
   return (
     <>
@@ -438,32 +435,7 @@ export function DownloadManagement() {
                         </p>
                         <div className="shrink-0 flex items-center space-x-0.5">
                           <Button variant="secondary" size="icon-xs" onClick={() => {
-                              // TODO: Consolidate cancellation logic
-                              if (download.id.startsWith('llamacpp') || download.id.startsWith('mlx')) {
-                                const downloadManager =
-                                  window.core.extensionManager.getByName(
-                                    '@janhq/download-extension'
-                                  )
-                                downloadManager.cancelDownload(download.id)
-                              } else {
-                                serviceHub
-                                  .models()
-                                  .abortDownload(download.name)
-                                  .then(() => {
-                                    toast.info(
-                                      t('common:toast.downloadCancelled.title'),
-                                      {
-                                        id: 'cancel-download',
-                                        description: t(
-                                          'common:toast.downloadCancelled.description'
-                                        ),
-                                      }
-                                    )
-                                    if (downloadProcesses.length === 0) {
-                                      setIsPopoverOpen(false)
-                                    }
-                                  })
-                              }
+                              cancelDownload(download.id)
                               setIsPopoverOpen(false)
                             }} >
                             <IconX
