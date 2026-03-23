@@ -357,6 +357,23 @@ bool stt_restart(SttResultCallback callback, const char *language) {
     return ok;
 }
 
+// ── Cancel recognition but keep engine alive ────────────────────────
+// Cancels the current recognition task but preserves AVAudioEngine,
+// recognizer, audio tap, and callback so that stt_restart() can create
+// a new session without a full engine rebuild (and without triggering
+// a new microphone access event).
+
+void stt_cancel_keep_engine(void) {
+    dispatch_sync(stt_queue(), ^{
+        if (g_task) {
+            [g_task cancel];
+            g_task = nil;
+        }
+        g_request = nil;
+        // Engine, recognizer, and callback stay alive for restart
+    });
+}
+
 // ── Cancel recognition (immediate) ──────────────────────────────────
 
 void stt_cancel(void) {

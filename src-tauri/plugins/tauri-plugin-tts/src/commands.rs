@@ -52,6 +52,8 @@ extern "C" {
     pub fn stt_stop();
     /// Cancel recognition immediately.
     pub fn stt_cancel();
+    /// Cancel recognition but keep the audio engine alive for restart.
+    pub fn stt_cancel_keep_engine();
 }
 
 // ── Native STT event bridge ──────────────────────────────────────────
@@ -901,6 +903,10 @@ pub async fn start_native_stt<R: Runtime>(
 /// If the engine is still alive, creates a new recognition task without
 /// tearing down AVAudioEngine (no mic indicator flicker). If the engine
 /// is dead, falls back to a full start with a fresh channel.
+///
+/// Always creates a fresh event channel and emitter loop to guarantee
+/// the event pipeline is intact, even if the previous emitter exited
+/// during a cancel/restart race.
 #[tauri::command]
 pub async fn restart_native_stt<R: Runtime>(
     app_handle: tauri::AppHandle<R>,
@@ -908,6 +914,17 @@ pub async fn restart_native_stt<R: Runtime>(
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        // Create a fresh channel BEFORE restarting so the event pipeline is
+        // guaranteed to be intact. Replacing the sender causes the old
+        // emitter loop to exit (its channel closes).
+        let (tx, rx) = std::sync::mpsc::channel::<SttEvent>();
+        {
+            let mut sender_guard = STT_SENDER
+                .lock()
+                .map_err(|e| format!("Lock error: {}", e))?;
+            *sender_guard = Some(tx);
+        }
+
         let lang = language.unwrap_or_else(|| "en-US".to_string());
         let lang_cstring = std::ffi::CString::new(lang.clone())
             .map_err(|e| format!("Invalid language string: {}", e))?;
@@ -918,14 +935,46 @@ pub async fn restart_native_stt<R: Runtime>(
         .await
         .map_err(|e| format!("Task join error: {}", e))?;
 
-        if restarted {
-            log::info!("[stt] Native speech recognition restarted (engine reused)");
-            return Ok(());
+        if !restarted {
+            // Engine is dead — fall back to full start with fresh channel
+            log::info!("[stt] Engine dead, falling back to full start");
+            return start_native_stt(app_handle, Some(lang)).await;
         }
 
-        // Engine is dead — fall back to full start with fresh channel
-        log::info!("[stt] Engine dead, falling back to full start");
-        start_native_stt(app_handle, Some(lang)).await
+        log::info!("[stt] Native speech recognition restarted (engine reused)");
+
+        // Spawn a fresh emitter loop for the new channel
+        let app = app_handle.clone();
+        tokio::task::spawn_blocking(move || {
+            loop {
+                match rx.recv() {
+                    Ok(SttEvent::Result { text, is_final }) => {
+                        let _ = app.emit(
+                            "stt://result",
+                            serde_json::json!({ "text": text, "isFinal": is_final }),
+                        );
+                    }
+                    Ok(SttEvent::Error { error }) => {
+                        let _ = app.emit(
+                            "stt://error",
+                            serde_json::json!({ "error": error }),
+                        );
+                    }
+                    Ok(SttEvent::SessionEnded) => {
+                        let _ = app.emit("stt://ended", ());
+                    }
+                    Ok(SttEvent::Shutdown) => {
+                        let _ = app.emit("stt://ended", ());
+                        break;
+                    }
+                    Err(_) => {
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(())
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -973,6 +1022,28 @@ pub async fn cancel_native_stt() -> Result<(), String> {
             *sender_guard = None;
         }
         log::info!("[stt] Native speech recognition cancelled");
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(())
+    }
+}
+
+/// Cancel native speech recognition but keep the audio engine alive.
+///
+/// Cancels the current recognition task without tearing down AVAudioEngine.
+/// The emitter loop and channel stay alive so that restart_native_stt can
+/// reuse the engine without triggering a new microphone access event.
+#[tauri::command]
+pub async fn cancel_native_stt_keep_engine() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        tokio::task::spawn_blocking(|| unsafe { stt_cancel_keep_engine() })
+            .await
+            .map_err(|e| format!("Task join error: {}", e))?;
+        log::info!("[stt] Native speech recognition cancelled (engine kept alive)");
         Ok(())
     }
 

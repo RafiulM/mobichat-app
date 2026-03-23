@@ -13,6 +13,7 @@ permissions = [
     "allow-restart-native-stt",
     "allow-stop-native-stt",
     "allow-cancel-native-stt",
+    "allow-cancel-native-stt-keep-engine",
     "allow-get-stt-authorization-status",
     "allow-request-stt-authorization"
 ]

@@ -48,12 +48,19 @@ function ProjectItem({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild>
+      <SidebarMenuButton
+        asChild
+        className="rounded-md"
+        style={item.color ? { backgroundColor: item.color + '20' } : undefined}
+      >
         <Link
           to="/project/$projectId"
           params={{ projectId: item.id }}
         >
-          <FolderIcon  className="text-foreground/70" size={16} />
+          <FolderIcon
+            size={16}
+            style={item.color ? { color: item.color } : undefined}
+          />
           <span>{item.name}</span>
         </Link>
       </SidebarMenuButton>
@@ -109,9 +116,9 @@ export function NavProjects() {
     setDeleteDialogOpen(true)
   }
 
-  const handleSaveEdit = async (name: string, assistantId?: string) => {
+  const handleSaveEdit = async (name: string, assistantId?: string, color?: string) => {
     if (selectedProject) {
-      await updateFolder(selectedProject.id, name, assistantId)
+      await updateFolder(selectedProject.id, name, assistantId, color)
       setEditDialogOpen(false)
       setSelectedProject(null)
     }

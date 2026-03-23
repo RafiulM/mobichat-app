@@ -19,9 +19,10 @@ interface UseSpeechModeOptions {
   onSubmit: (text: string) => void
 }
 
-// Module-level singleton — preserves the MediaStream across component
-// remounts (route changes) so getUserMedia() is not re-triggered.
+// Module-level singletons — preserve state across component remounts
+// (route changes) so getUserMedia() / AVAudioEngine are not re-triggered.
 const sharedHttpSttService = new HttpSpeechRecognitionService()
+const sharedNativeSttService = new NativeSpeechRecognitionService()
 
 // ── Module-level permission cache ────────────────────────────────────
 // Survives hook remounts (page navigation) so we never re-request
@@ -43,6 +44,31 @@ let sttAuthGranted =
 
 let micPermissionPromise: Promise<boolean> | null = null
 let sttAuthPromise: Promise<boolean> | null = null
+
+// Listen for startup permission results from the native plugin so the
+// permission cache is warm before the user ever activates voice mode.
+if (typeof IS_TAURI !== 'undefined' && IS_TAURI && typeof IS_MACOS !== 'undefined' && IS_MACOS) {
+  import('@tauri-apps/api/event').then(({ listen }) => {
+    listen<{ micGranted: boolean; sttGranted: boolean }>('stt://permissions-ready', (event) => {
+      if (event.payload.micGranted) {
+        micPermissionGranted = true
+        try { localStorage.setItem('mic-permission-granted', 'true') } catch {}
+      }
+      if (event.payload.sttGranted) {
+        sttAuthGranted = true
+        try { localStorage.setItem('stt-auth-granted', 'true') } catch {}
+      }
+    })
+  })
+}
+
+// Debounce timer for startListeningInternal — coalesces concurrent triggers
+// from multiple effects (voice mode activation + chat ready + auto-restart).
+let startListeningDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+// Retry counter for the auto-restart loop — limits engine recreation storms.
+let sttRestartCount = 0
+const STT_MAX_RESTARTS = 3
 
 /**
  * Ensure microphone permission is granted. Returns true if authorized.
@@ -167,13 +193,13 @@ export function useSpeechMode({
     sharedHttpSttService
   )
   const nativeSttServiceRef = useRef<NativeSpeechRecognitionService>(
-    new NativeSpeechRecognitionService()
+    sharedNativeSttService
   )
 
-  /** Tracks whether the native engine has been started at least once.
-   *  On subsequent calls we use restart() to skip permission checks and
-   *  reuse the AVAudioEngine, avoiding mic indicator flicker. */
-  const nativeEngineStartedRef = useRef(false)
+  /** Skip the voice mode activation effect on initial mount — the chat ready
+   *  effect (with its 300ms delay) handles the initial start instead, giving
+   *  the thread change effect time to settle first. */
+  const initialMountRef = useRef(true)
 
   /** Guards against concurrent startNativeListening calls — multiple effects
    *  can fire close together (voice mode activation + chat ready), and we
@@ -334,6 +360,7 @@ export function useSpeechMode({
       setCurrentTranscript(text)
 
       if (isFinal && text.trim()) {
+        sttRestartCount = 0 // Successful recognition — reset retry counter
         setSttState('processing')
         onSubmitRef.current(text.trim())
         setCurrentTranscript('')
@@ -345,15 +372,22 @@ export function useSpeechMode({
       if (store.sttState === 'listening' || store.sttState === 'processing') {
         setSttState('idle')
       }
-      // Auto-restart if voice mode is still active
+      // Auto-restart if voice mode is still active (with retry limit)
       const current = useSpeechStore.getState()
       if (current.isVoiceModeActive && current.ttsState === 'idle') {
+        if (sttRestartCount >= STT_MAX_RESTARTS) {
+          console.warn('[Speech] Max auto-restarts reached, stopping')
+          sttRestartCount = 0
+          return
+        }
+        sttRestartCount++
+        const delay = 600 * sttRestartCount
         setTimeout(() => {
           const s = useSpeechStore.getState()
           if (s.isVoiceModeActive && s.ttsState === 'idle' && s.sttState === 'idle') {
             startListeningInternal()
           }
-        }, 600)
+        }, delay)
       }
     },
     onError: (error: string) => {
@@ -466,7 +500,7 @@ export function useSpeechMode({
     nativeStartingRef.current = true
 
     try {
-    const isRestart = nativeEngineStartedRef.current
+    const isRestart = nativeSttServiceRef.current.engineAlive
 
     if (!isRestart) {
       // First start — request mic and speech recognition permissions via
@@ -494,6 +528,7 @@ export function useSpeechMode({
       onTranscript: (text: string, isFinal: boolean) => {
         setCurrentTranscript(text)
         if (isFinal && text.trim()) {
+          sttRestartCount = 0 // Successful recognition — reset retry counter
           setSttState('processing')
           onSubmitRef.current(text.trim())
           setCurrentTranscript('')
@@ -505,21 +540,27 @@ export function useSpeechMode({
         if (store.sttState === 'listening' || store.sttState === 'processing') {
           setSttState('idle')
         }
-        // Auto-restart if voice mode is still active
+        // Auto-restart if voice mode is still active (with retry limit)
         const current = useSpeechStore.getState()
         if (current.isVoiceModeActive && current.ttsState === 'idle') {
+          if (sttRestartCount >= STT_MAX_RESTARTS) {
+            console.warn('[Speech] Max auto-restarts reached, stopping')
+            sttRestartCount = 0
+            return
+          }
+          sttRestartCount++
+          const delay = 600 * sttRestartCount // 600, 1200, 1800ms
           setTimeout(() => {
             const s = useSpeechStore.getState()
             if (s.isVoiceModeActive && s.ttsState === 'idle' && s.sttState === 'idle') {
-              startNativeListening()
+              startListeningInternal()
             }
-          }, 600)
+          }, delay)
         }
       },
       onError: (error: string) => {
         if (!isMountedRef.current) return
         console.error('[Speech] Native STT error:', error)
-        nativeEngineStartedRef.current = false
         setSttError(error)
         setSttState('error')
       },
@@ -529,7 +570,6 @@ export function useSpeechMode({
       await nativeSttServiceRef.current.restart(sttOptions)
     } else {
       await nativeSttServiceRef.current.start(sttOptions)
-      nativeEngineStartedRef.current = true
     }
     } finally {
       nativeStartingRef.current = false
@@ -537,18 +577,31 @@ export function useSpeechMode({
   }, [setSttState, setCurrentTranscript, setSttError])
 
   const startListeningInternal = useCallback(() => {
-    console.info('[Speech] startListeningInternal', { useNativeStt, useWebSpeechApi, useHttpStt })
-    if (useNativeStt) {
-      startNativeListening()
-    } else if (useWebSpeechApi) {
-      setSttState('listening')
-      setCurrentTranscript('')
-      sttServiceRef.current.start(sttCallbacks())
-    } else if (useHttpStt) {
-      startHttpListening()
-    } else {
-      console.warn('[Speech] No STT backend available')
+    // Debounce: if multiple effects trigger this within 50ms, only the last
+    // call executes. Prevents concurrent start calls from effect races.
+    if (startListeningDebounceTimer) {
+      clearTimeout(startListeningDebounceTimer)
     }
+    startListeningDebounceTimer = setTimeout(() => {
+      startListeningDebounceTimer = null
+      // Re-check state after debounce — a cancel may have fired in between
+      const current = useSpeechStore.getState()
+      if (!current.isVoiceModeActive || current.sttState !== 'idle' || current.ttsState !== 'idle') {
+        return
+      }
+      console.info('[Speech] startListeningInternal', { useNativeStt, useWebSpeechApi, useHttpStt })
+      if (useNativeStt) {
+        startNativeListening()
+      } else if (useWebSpeechApi) {
+        setSttState('listening')
+        setCurrentTranscript('')
+        sttServiceRef.current.start(sttCallbacks())
+      } else if (useHttpStt) {
+        startHttpListening()
+      } else {
+        console.warn('[Speech] No STT backend available')
+      }
+    }, 50)
   }, [useNativeStt, useWebSpeechApi, useHttpStt, setSttState, setCurrentTranscript, sttCallbacks, startHttpListening, startNativeListening])
 
   const startListening = useCallback(() => {
@@ -670,6 +723,14 @@ export function useSpeechMode({
   // ── Voice mode activation / deactivation ─────────────────────────────
 
   useEffect(() => {
+    // Skip on initial mount — the chat ready effect (with its 300ms delay)
+    // handles the first start, giving the thread change effect time to run
+    // first and avoid the start→cancel→start race on page navigation.
+    if (initialMountRef.current) {
+      initialMountRef.current = false
+      return
+    }
+
     if (isVoiceModeActive) {
       console.info('[Speech] Voice mode activated', {
         useNativeStt,
@@ -697,10 +758,14 @@ export function useSpeechMode({
       // When voice mode is deactivated, stop everything.
       // Use cancelKeepStream for HTTP STT to preserve the MediaStream —
       // avoids re-triggering getUserMedia dialogs when voice mode is toggled.
+      if (startListeningDebounceTimer) {
+        clearTimeout(startListeningDebounceTimer)
+        startListeningDebounceTimer = null
+      }
+      sttRestartCount = 0
       sttServiceRef.current.cancel()
       httpSttServiceRef.current.cancelKeepStream()
-      nativeSttServiceRef.current.cancel()
-      nativeEngineStartedRef.current = false
+      nativeSttServiceRef.current.cancelKeepEngine()
       nativeStartingRef.current = false
       httpStartingRef.current = false
       setSttState('idle')
@@ -840,10 +905,16 @@ export function useSpeechMode({
     isMountedRef.current = true
     return () => {
       isMountedRef.current = false
+      if (startListeningDebounceTimer) {
+        clearTimeout(startListeningDebounceTimer)
+        startListeningDebounceTimer = null
+      }
+      sttRestartCount = 0
       sttServiceRef.current.cancel()
       httpSttServiceRef.current.cancelKeepStream()
-      nativeSttServiceRef.current.cancel()
-      nativeEngineStartedRef.current = false
+      // Use cancelKeepEngine to preserve the AVAudioEngine across route
+      // changes — avoids re-triggering macOS microphone access on remount.
+      nativeSttServiceRef.current.cancelKeepEngine()
       nativeStartingRef.current = false
       httpStartingRef.current = false
       audioPlayerRef.current.stop()
@@ -855,12 +926,12 @@ export function useSpeechMode({
   // Reset state when thread changes
   useEffect(() => {
     // Stop any ongoing speech operations when switching threads.
-    // Use cancelKeepStream for HTTP STT to preserve the MediaStream —
-    // avoids re-triggering getUserMedia permission dialogs on thread change.
+    // Use cancelKeepStream / cancelKeepEngine to preserve the MediaStream
+    // and AVAudioEngine — avoids re-triggering permission dialogs on
+    // thread change.
     sttServiceRef.current.cancel()
     httpSttServiceRef.current.cancelKeepStream()
-    nativeSttServiceRef.current.cancel()
-    nativeEngineStartedRef.current = false
+    nativeSttServiceRef.current.cancelKeepEngine()
     nativeStartingRef.current = false
     httpStartingRef.current = false
     audioPlayerRef.current.stop()

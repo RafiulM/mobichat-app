@@ -51,7 +51,7 @@ echo "Dev server ready!"
 #    Clean the package first to ensure no stale embedded assets from previous builds.
 echo "Building Tauri binary (dev mode — loads from devUrl)..."
 cd "$ROOT_DIR/src-tauri"
-cargo clean -p MobiChat 2>/dev/null || true
+cargo clean -p MacLLMs 2>/dev/null || true
 cargo build --no-default-features --features "tauri/wry,tauri/common-controls-v6,tauri/x11,tauri/protocol-asset,tauri/macos-private-api,tauri/tray-icon,tauri/test,desktop"
 
 # 4. Create .app bundle

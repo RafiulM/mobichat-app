@@ -16,6 +16,7 @@ Default permissions for the TTS plugin
 - `allow-restart-native-stt`
 - `allow-stop-native-stt`
 - `allow-cancel-native-stt`
+- `allow-cancel-native-stt-keep-engine`
 - `allow-get-stt-authorization-status`
 - `allow-request-stt-authorization`
 
@@ -50,6 +51,32 @@ Enables the cancel_native_stt command without any pre-configured scope.
 <td>
 
 Denies the cancel_native_stt command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`tts:allow-cancel-native-stt-keep-engine`
+
+</td>
+<td>
+
+Enables the cancel_native_stt_keep_engine command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`tts:deny-cancel-native-stt-keep-engine`
+
+</td>
+<td>
+
+Denies the cancel_native_stt_keep_engine command without any pre-configured scope.
 
 </td>
 </tr>

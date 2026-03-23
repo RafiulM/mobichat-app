@@ -1,5 +1,5 @@
 {
-  "name": "mobichat-app",
+  "name": "macllms-app",
   "private": true,
   "type": "module",
   "workspaces": {
@@ -9,7 +9,7 @@
     ]
   },
   "scripts": {
-    "lint": "yarn workspace @mobichat/web-app lint",
+    "lint": "yarn workspace @macllms/web-app lint",
     "dev": "yarn dev:tauri",
     "ios": "yarn tauri ios dev",
     "android": "yarn tauri android dev",
@@ -19,7 +19,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:prepare": "yarn build:icon && yarn copy:assets:tauri && yarn build --no-bundle ",
-    "dev:web": "yarn workspace @mobichat/web-app dev",
+    "dev:web": "yarn workspace @macllms/web-app dev",
     "dev:tauri": "yarn build:icon && yarn copy:assets:tauri && cross-env IS_CLEAN=true tauri dev",
     "dev:ios": "yarn copy:assets:mobile && RUSTC_WRAPPER= cross-env IS_IOS=true yarn tauri ios dev --features mobile",
     "dev:android": "yarn copy:assets:mobile && cross-env IS_ANDROID=true yarn tauri android dev --features mobile",
@@ -39,7 +39,7 @@
     "build:tauri:plugin:api": "cd src-tauri/plugins && yarn install && yarn workspaces foreach -Apt run build",
     "build:icon": "tauri icon ./src-tauri/icons/icon.png",
     "build:core": "cd core && yarn build && yarn pack",
-    "build:web": "yarn workspace @mobichat/web-app build",
+    "build:web": "yarn workspace @macllms/web-app build",
     "build:extensions": "rimraf ./pre-install/*.tgz || true && yarn workspace @janhq/core build && cd extensions && yarn install && cd .. && run-script-os",
     "build:extensions:darwin": "cd extensions && yarn workspaces foreach -Apt run build:publish",
     "build:extensions:win32": "cd extensions && yarn workspaces foreach -Apt --exclude @janhq/mlx-extension run build:publish",

@@ -77,8 +77,8 @@ export const useSpeechStore = create<SpeechState>()(
       toggleVoiceMode: () =>
         set((state) => ({
           isVoiceModeActive: !state.isVoiceModeActive,
-          // When activating voice mode, open the overlay
-          isOverlayOpen: !state.isVoiceModeActive ? true : state.isOverlayOpen,
+          // When activating, open the overlay; when deactivating, close it
+          isOverlayOpen: !state.isVoiceModeActive,
         })),
 
       setOverlayOpen: (open) => set({ isOverlayOpen: open }),

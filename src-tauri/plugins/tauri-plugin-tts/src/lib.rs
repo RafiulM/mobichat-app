@@ -1,6 +1,6 @@
 use tauri::{
     plugin::{Builder, TauriPlugin},
-    Manager, Runtime,
+    Emitter, Manager, Runtime,
 };
 
 pub mod cleanup;
@@ -28,6 +28,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::restart_native_stt,
             commands::stop_native_stt,
             commands::cancel_native_stt,
+            commands::cancel_native_stt_keep_engine,
             commands::get_stt_authorization_status,
             commands::request_stt_authorization,
         ])
@@ -36,42 +37,27 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 
             #[cfg(target_os = "macos")]
             {
-                // Request microphone and speech recognition permissions on app
-                // startup so that voice mode can start without any TCC dialogs.
-                // In production .app builds this triggers the TCC dialog(s).
-                // In dev builds (non-bundled binary) this silently fails —
-                // the user can use the Settings → Speech → Grant Access button
-                // which launches a helper .app to trigger the TCC dialog.
-                std::thread::spawn(|| {
-                    // Microphone permission (AVCaptureDevice)
+                // Check (but don't request) mic and STT permission status at
+                // startup. Emit the result so the frontend can warm its cache.
+                // Permission requests happen exclusively through the frontend's
+                // ensureMicPermission() / ensureSttAuth() which have proper
+                // deduplication — doing it here too causes duplicate TCC dialogs.
+                let app_handle = app.clone();
+                std::thread::spawn(move || {
                     let mic_status = unsafe { commands::mic_authorization_status() };
-                    log::info!(
-                        "[tts] Microphone auth status at startup: {} (0=undetermined, 1=authorized, 2=denied, 3=restricted)",
-                        mic_status
-                    );
-                    if mic_status == 0 {
-                        log::info!("[tts] Requesting microphone permission...");
-                        let granted = unsafe { commands::request_mic_access() };
-                        log::info!(
-                            "[tts] Microphone permission result: {}",
-                            if granted { "GRANTED" } else { "DENIED" }
-                        );
-                    }
-
-                    // Speech recognition authorization (SFSpeechRecognizer)
                     let stt_status = unsafe { commands::stt_authorization_status() };
                     log::info!(
-                        "[tts] STT auth status at startup: {} (0=undetermined, 1=authorized, 2=denied, 3=restricted)",
-                        stt_status
+                        "[tts] Permission status at startup — mic: {} stt: {} (0=undetermined, 1=authorized, 2=denied, 3=restricted)",
+                        mic_status, stt_status
                     );
-                    if stt_status == 0 {
-                        log::info!("[tts] Requesting speech recognition authorization...");
-                        let granted = unsafe { commands::stt_request_authorization() };
-                        log::info!(
-                            "[tts] STT authorization result: {}",
-                            if granted { "GRANTED" } else { "DENIED" }
-                        );
-                    }
+
+                    let _ = app_handle.emit(
+                        "stt://permissions-ready",
+                        serde_json::json!({
+                            "micGranted": mic_status == 1,
+                            "sttGranted": stt_status == 1
+                        }),
+                    );
                 });
             }
 

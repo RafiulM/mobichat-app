@@ -1,5 +1,5 @@
 {
-  "name": "@mobichat/web-app",
+  "name": "@macllms/web-app",
   "private": true,
   "version": "0.7.6",
   "type": "module",

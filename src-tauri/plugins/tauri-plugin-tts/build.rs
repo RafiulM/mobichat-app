@@ -11,6 +11,7 @@ const COMMANDS: &[&str] = &[
     "restart_native_stt",
     "stop_native_stt",
     "cancel_native_stt",
+    "cancel_native_stt_keep_engine",
     "get_stt_authorization_status",
     "request_stt_authorization",
 ];

@@ -856,7 +856,7 @@ function ThreadDetail() {
     <div className="flex flex-col h-[calc(100dvh-(env(safe-area-inset-bottom)+env(safe-area-inset-top)))]">
       <HeaderPage>
         <div className="flex items-center justify-between w-full pr-2">
-          <DropdownModelProvider model={threadModel} />
+          <DropdownModelProvider model={threadModel} minimal />
           <SpeechModeToggle />
         </div>
       </HeaderPage>
@@ -966,7 +966,15 @@ function ThreadDetail() {
 
       <VoiceOverlay
         isOpen={speechMode.isOverlayOpen}
-        onClose={() => speechMode.setOverlayOpen(false)}
+        onClose={() => {
+          if (speechMode.isVoiceModeActive) {
+            speechMode.toggleVoiceMode()
+          } else {
+            speechMode.stopListening()
+            speechMode.stopSpeaking()
+            speechMode.setOverlayOpen(false)
+          }
+        }}
         sttState={speechMode.sttState}
         sttError={speechMode.sttError}
         isSttSupported={speechMode.isSttSupported}

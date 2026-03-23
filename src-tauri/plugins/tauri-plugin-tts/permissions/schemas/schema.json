@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the cancel_native_stt command without any pre-configured scope."
         },
         {
+          "description": "Enables the cancel_native_stt_keep_engine command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cancel-native-stt-keep-engine",
+          "markdownDescription": "Enables the cancel_native_stt_keep_engine command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cancel_native_stt_keep_engine command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cancel-native-stt-keep-engine",
+          "markdownDescription": "Denies the cancel_native_stt_keep_engine command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_microphone_status command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-microphone-status",
@@ -463,10 +475,10 @@
           "markdownDescription": "Denies the stop_tts_server command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the TTS plugin\n#### This default permission set includes:\n\n- `allow-start-tts-server`\n- `allow-stop-tts-server`\n- `allow-get-tts-port`\n- `allow-is-tts-running`\n- `allow-request-microphone-permission`\n- `allow-get-microphone-status`\n- `allow-open-microphone-settings`\n- `allow-request-microphone-via-helper`\n- `allow-start-native-stt`\n- `allow-restart-native-stt`\n- `allow-stop-native-stt`\n- `allow-cancel-native-stt`\n- `allow-get-stt-authorization-status`\n- `allow-request-stt-authorization`",
+          "description": "Default permissions for the TTS plugin\n#### This default permission set includes:\n\n- `allow-start-tts-server`\n- `allow-stop-tts-server`\n- `allow-get-tts-port`\n- `allow-is-tts-running`\n- `allow-request-microphone-permission`\n- `allow-get-microphone-status`\n- `allow-open-microphone-settings`\n- `allow-request-microphone-via-helper`\n- `allow-start-native-stt`\n- `allow-restart-native-stt`\n- `allow-stop-native-stt`\n- `allow-cancel-native-stt`\n- `allow-cancel-native-stt-keep-engine`\n- `allow-get-stt-authorization-status`\n- `allow-request-stt-authorization`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the TTS plugin\n#### This default permission set includes:\n\n- `allow-start-tts-server`\n- `allow-stop-tts-server`\n- `allow-get-tts-port`\n- `allow-is-tts-running`\n- `allow-request-microphone-permission`\n- `allow-get-microphone-status`\n- `allow-open-microphone-settings`\n- `allow-request-microphone-via-helper`\n- `allow-start-native-stt`\n- `allow-restart-native-stt`\n- `allow-stop-native-stt`\n- `allow-cancel-native-stt`\n- `allow-get-stt-authorization-status`\n- `allow-request-stt-authorization`"
+          "markdownDescription": "Default permissions for the TTS plugin\n#### This default permission set includes:\n\n- `allow-start-tts-server`\n- `allow-stop-tts-server`\n- `allow-get-tts-port`\n- `allow-is-tts-running`\n- `allow-request-microphone-permission`\n- `allow-get-microphone-status`\n- `allow-open-microphone-settings`\n- `allow-request-microphone-via-helper`\n- `allow-start-native-stt`\n- `allow-restart-native-stt`\n- `allow-stop-native-stt`\n- `allow-cancel-native-stt`\n- `allow-cancel-native-stt-keep-engine`\n- `allow-get-stt-authorization-status`\n- `allow-request-stt-authorization`"
         }
       ]
     }

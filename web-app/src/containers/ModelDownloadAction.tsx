@@ -22,7 +22,7 @@ export const ModelDownloadAction = ({
 
   const { t } = useTranslation()
   const huggingfaceToken = useGeneralSetting((state) => state.huggingfaceToken)
-  const { downloads, localDownloadingModels, addLocalDownloadingModel } =
+  const { downloads, localDownloadingModels, addLocalDownloadingModel, removeLocalDownloadingModel } =
     useDownloadStore()
   const downloadProcesses = useMemo(
     () =>
@@ -68,6 +68,9 @@ export const ModelDownloadAction = ({
         )?.path,
         huggingfaceToken
       )
+      .catch(() => {
+        removeLocalDownloadingModel(variant.model_id)
+      })
   }, [
     serviceHub,
     variant.path,
@@ -77,6 +80,7 @@ export const ModelDownloadAction = ({
     model.mmproj_models,
     navigate,
     addLocalDownloadingModel,
+    removeLocalDownloadingModel,
   ])
 
   const isDownloading =

@@ -1,4 +1,5 @@
 import HeaderPage from '@/containers/HeaderPage'
+import { DownloadManagement } from '@/containers/DownloadManegement'
 import {
   createFileRoute,
   useParams,
@@ -55,7 +56,7 @@ function HubModelDetailContent() {
   const search = useSearch({ from: Route.id as any })
   const { getProviderByName } = useModelProvider()
   const llamaProvider = getProviderByName('llamacpp')
-  const { downloads, localDownloadingModels, addLocalDownloadingModel } =
+  const { downloads, localDownloadingModels, addLocalDownloadingModel, removeLocalDownloadingModel } =
     useDownloadStore()
   const serviceHub = useServiceHub()
   const [repoData, setRepoData] = useState<CatalogModel | undefined>()
@@ -270,7 +271,7 @@ function HubModelDetailContent() {
   return (
     <div className="flex flex-col h-svh w-full">
       <HeaderPage>
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex items-center justify-between w-full">
           <Button
             onClick={() => navigate({ to: route.hub.index })}
             aria-label="Go back"
@@ -281,6 +282,7 @@ function HubModelDetailContent() {
             <IconArrowLeft size={18} className="text-muted-foreground" />
             <span className="text-foreground">Back to Hub</span>
           </Button>
+          <DownloadManagement />
         </div>
       </HeaderPage>
 
@@ -543,6 +545,9 @@ function HubModelDetailContent() {
                                           )?.path,
                                           huggingfaceToken
                                         )
+                                        .catch(() => {
+                                          removeLocalDownloadingModel(variant.model_id)
+                                        })
                                     }}
                                     className={cn(isDownloading && 'hidden')}
                                     variant="outline"

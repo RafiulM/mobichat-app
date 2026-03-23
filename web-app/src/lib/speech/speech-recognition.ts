@@ -32,7 +32,7 @@ interface SpeechRecognitionInstance extends EventTarget {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance
 
-/** Silence timeout in milliseconds — matches MobiChat's silenceThreshold of 1.5s */
+/** Silence timeout in milliseconds — matches MacLLMs's silenceThreshold of 1.5s */
 const SILENCE_TIMEOUT_MS = 1500
 
 /** Fallback timeout for processing state, in milliseconds */
