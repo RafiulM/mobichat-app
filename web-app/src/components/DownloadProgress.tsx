@@ -50,7 +50,7 @@ export function DownloadProgress({
           ) : (
             <div className="flex-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader className="size-3 animate-spin" />
-              <span>Starting download...</span>
+              <span>{current > 0 ? `${renderGB(current)} GB downloaded` : 'Starting download...'}</span>
             </div>
           )}
           <Button
@@ -91,7 +91,7 @@ export function DownloadProgress({
         ) : (
           <div className="flex-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Loader className="size-3 animate-spin" />
-            <span>Starting...</span>
+            <span>{current > 0 ? `${renderGB(current)} GB downloaded` : 'Starting...'}</span>
           </div>
         )}
         <Button

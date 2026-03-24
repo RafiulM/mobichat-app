@@ -22,12 +22,13 @@ export function DownloadButtonPlaceholder({
   model,
   handleUseModel,
 }: ModelProps) {
-  const { downloads, localDownloadingModels, addLocalDownloadingModel } =
+  const { downloads, localDownloadingModels, addLocalDownloadingModel, removeLocalDownloadingModel } =
     useDownloadStore(
       useShallow((state) => ({
         downloads: state.downloads,
         localDownloadingModels: state.localDownloadingModels,
         addLocalDownloadingModel: state.addLocalDownloadingModel,
+        removeLocalDownloadingModel: state.removeLocalDownloadingModel,
       }))
     )
   const { t } = useTranslation()
@@ -69,12 +70,13 @@ export function DownloadButtonPlaceholder({
   }, [llamaProvider, modelId, model.developer])
 
   useEffect(() => {
-    events.on(
-      DownloadEvent.onFileDownloadAndVerificationSuccess,
-      (state: DownloadState) => {
-        if (state.modelId === modelId) setDownloaded(true)
-      }
-    )
+    const handler = (state: DownloadState) => {
+      if (state.modelId === modelId) setDownloaded(true)
+    }
+    events.on(DownloadEvent.onFileDownloadAndVerificationSuccess, handler)
+    return () => {
+      events.off(DownloadEvent.onFileDownloadAndVerificationSuccess, handler)
+    }
   }, [modelId])
 
   const isRecommendedModel = useCallback((modelId: string) => {
@@ -114,6 +116,9 @@ export function DownloadButtonPlaceholder({
     serviceHub
       .models()
       .pullModelWithMetadata(modelId, modelUrl, mmprojPath, huggingfaceToken)
+      .catch(() => {
+        removeLocalDownloadingModel(modelId)
+      })
   }
 
   return (

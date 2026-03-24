@@ -39,7 +39,7 @@ interface AddProjectDialogProps {
     assistantId?: string
     color?: string
   }
-  onSave: (name: string, assistantId?: string) => void
+  onSave: (name: string, assistantId?: string, color?: string) => void
 }
 
 export default function AddProjectDialog({
@@ -78,7 +78,7 @@ export default function AddProjectDialog({
       return
     }
 
-    onSave(trimmedName)
+    onSave(trimmedName, undefined, selectedColor)
 
     // Show success message
     if (editingKey) {
@@ -98,7 +98,7 @@ export default function AddProjectDialog({
 
   // Check if the button should be disabled
   const hasChanged = editingKey
-    ? name.trim() !== initialData?.name
+    ? name.trim() !== initialData?.name || selectedColor !== initialData?.color
     : true
   const isButtonDisabled = !name.trim() || (editingKey && !hasChanged)
 

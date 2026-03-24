@@ -30,6 +30,7 @@ import {
   MoreHorizontal,
   Plus,
   Trash2,
+  ChevronDown,
 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { useTranslation } from '@/i18n/react-i18next-compat'
@@ -65,9 +66,19 @@ function ProjectCollapsible({
     <Collapsible asChild defaultOpen className="group/collapsible">
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton size="sm">
-            <FolderIcon className="!size-3.5 text-foreground/70 group-data-[state=open]/collapsible:hidden" />
-            <FolderOpenIcon className="!size-3.5 text-foreground/70 hidden group-data-[state=open]/collapsible:block" />
+          <SidebarMenuButton
+            size="sm"
+            className="rounded-md"
+            style={project.color ? { backgroundColor: project.color + '20' } : undefined}
+          >
+            <FolderIcon
+              className="!size-3.5 group-data-[state=open]/collapsible:hidden"
+              style={project.color ? { color: project.color } : undefined}
+            />
+            <FolderOpenIcon
+              className="!size-3.5 hidden group-data-[state=open]/collapsible:block"
+              style={project.color ? { color: project.color } : undefined}
+            />
             <span className="truncate text-[13px]">{project.name}</span>
           </SidebarMenuButton>
         </CollapsibleTrigger>
@@ -144,6 +155,8 @@ function ProjectCollapsible({
   )
 }
 
+const RECENT_CHATS_LIMIT = 5
+
 export function NavChats() {
   const { t } = useTranslation()
   const getFilteredThreads = useThreads((state) => state.getFilteredThreads)
@@ -151,6 +164,7 @@ export function NavChats() {
   const deleteAllThreads = useThreads((state) => state.deleteAllThreads)
   const { folders, updateFolder } = useThreadManagement()
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [showAllChats, setShowAllChats] = useState(false)
 
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -161,9 +175,15 @@ export function NavChats() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getFilteredThreads, threads])
 
-  const threadsWithoutProject = useMemo(() => {
-    return allThreads.filter((thread) => !thread.metadata?.project)
+  // Non-project threads sorted by most recent
+  const recentChats = useMemo(() => {
+    return allThreads
+      .filter((thread) => !thread.metadata?.project)
+      .sort((a, b) => (b.updated || 0) - (a.updated || 0))
   }, [allThreads])
+
+  const visibleChats = showAllChats ? recentChats : recentChats.slice(0, RECENT_CHATS_LIMIT)
+  const hasMoreChats = recentChats.length > RECENT_CHATS_LIMIT
 
   const threadsByProject = useMemo(() => {
     const map = new Map<string, Thread[]>()
@@ -177,35 +197,23 @@ export function NavChats() {
     return map
   }, [allThreads])
 
-  // Build a mixed list of projects and non-project threads sorted by recency
-  const sidebarItems = useMemo(() => {
-    type SidebarItem =
-      | { type: 'thread'; thread: Thread; updated: number }
-      | { type: 'project'; project: ThreadFolder; threads: Thread[]; updated: number }
-
-    const items: SidebarItem[] = []
-
-    for (const thread of threadsWithoutProject) {
-      items.push({ type: 'thread', thread, updated: thread.updated || 0 })
-    }
-
-    for (const folder of folders) {
-      const projectThreads = threadsByProject.get(folder.id) || []
-      const latestThreadUpdate = projectThreads.reduce(
-        (max, t) => Math.max(max, t.updated || 0),
-        0
-      )
-      items.push({
-        type: 'project',
-        project: folder,
-        threads: projectThreads,
-        updated: Math.max(latestThreadUpdate, folder.updated_at || 0),
+  // Projects sorted by most recent activity
+  const sortedProjects = useMemo(() => {
+    return [...folders]
+      .map((folder) => {
+        const projectThreads = threadsByProject.get(folder.id) || []
+        const latestThreadUpdate = projectThreads.reduce(
+          (max, t) => Math.max(max, t.updated || 0),
+          0
+        )
+        return {
+          project: folder,
+          threads: projectThreads,
+          updated: Math.max(latestThreadUpdate, folder.updated_at || 0),
+        }
       })
-    }
-
-    items.sort((a, b) => b.updated - a.updated)
-    return items
-  }, [threadsWithoutProject, folders, threadsByProject])
+      .sort((a, b) => b.updated - a.updated)
+  }, [folders, threadsByProject])
 
   const handleEdit = (project: ThreadFolder) => {
     setSelectedProject(project)
@@ -217,60 +225,84 @@ export function NavChats() {
     setDeleteDialogOpen(true)
   }
 
-  const handleSaveEdit = async (name: string, assistantId?: string) => {
+  const handleSaveEdit = async (name: string, assistantId?: string, color?: string) => {
     if (selectedProject) {
-      await updateFolder(selectedProject.id, name, assistantId)
+      await updateFolder(selectedProject.id, name, assistantId, color)
       setEditDialogOpen(false)
       setSelectedProject(null)
     }
   }
 
-  if (sidebarItems.length === 0) {
+  if (recentChats.length === 0 && sortedProjects.length === 0) {
     return null
   }
 
   return (
     <>
-      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-        <SidebarGroupLabel>{t('common:chats')}</SidebarGroupLabel>
-        {threadsWithoutProject.length > 1 &&
-          <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-            <DropdownMenuTrigger asChild>
-              <SidebarGroupAction className="hover:bg-sidebar-foreground/8">
-                <MoreHorizontal className="text-muted-foreground" />
-                <span className="sr-only">More</span>
-              </SidebarGroupAction>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="start">
-              <DeleteAllThreadsDialog
-                onDeleteAll={deleteAllThreads}
-                onDropdownClose={() => setDropdownOpen(false)}
-              />
-            </DropdownMenuContent>
-          </DropdownMenu>
-        }
-        <SidebarMenu>
-          {sidebarItems.map((item) => {
-            if (item.type === 'project') {
-              return (
-                <ProjectCollapsible
-                  key={item.project.id}
-                  project={item.project}
-                  threads={item.threads}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
+      {/* Recent Chats section */}
+      {recentChats.length > 0 && (
+        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+          <SidebarGroupLabel>{t('common:recentChats')}</SidebarGroupLabel>
+          {recentChats.length > 1 &&
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+              <DropdownMenuTrigger asChild>
+                <SidebarGroupAction className="hover:bg-sidebar-foreground/8">
+                  <MoreHorizontal className="text-muted-foreground" />
+                  <span className="sr-only">More</span>
+                </SidebarGroupAction>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="start">
+                <DeleteAllThreadsDialog
+                  onDeleteAll={deleteAllThreads}
+                  onDropdownClose={() => setDropdownOpen(false)}
                 />
-              )
-            }
-            return (
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
+          <SidebarMenu>
+            {visibleChats.map((thread) => (
               <ThreadList
-                key={item.thread.id}
-                threads={[item.thread]}
+                key={thread.id}
+                threads={[thread]}
               />
-            )
-          })}
-        </SidebarMenu>
-      </SidebarGroup>
+            ))}
+            {hasMoreChats && (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => setShowAllChats(!showAllChats)}
+                >
+                  <ChevronDown className={`!size-3.5 transition-transform ${showAllChats ? 'rotate-180' : ''}`} />
+                  <span className="text-xs">
+                    {showAllChats
+                      ? t('common:showLess')
+                      : t('common:showMore', { count: recentChats.length - RECENT_CHATS_LIMIT })}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+          </SidebarMenu>
+        </SidebarGroup>
+      )}
+
+      {/* Projects section */}
+      {sortedProjects.length > 0 && (
+        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+          <SidebarGroupLabel>{t('common:projects.title')}</SidebarGroupLabel>
+          <SidebarMenu>
+            {sortedProjects.map(({ project, threads: projectThreads }) => (
+              <ProjectCollapsible
+                key={project.id}
+                project={project}
+                threads={projectThreads}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+      )}
 
       <AddProjectDialog
         open={editDialogOpen}

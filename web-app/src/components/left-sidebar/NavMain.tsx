@@ -40,6 +40,7 @@ import { useAgentMode } from '@/hooks/useAgentMode'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { useAppState } from '@/hooks/useAppState'
 import { isOpenClawRunning } from '@/utils/openclaw'
+import { useDownloadStore } from '@/hooks/useDownloadStore'
 
 type AnimatedIconHandle =
   | SearchIconHandle
@@ -142,6 +143,13 @@ export function NavMain() {
   const openClawAvailable = useAppState((state) => state.openClawRunning)
   const setOpenClawRunning = useAppState((state) => state.setOpenClawRunning)
 
+  const downloadCount = useDownloadStore((state) => {
+    const modelDownloads = Object.keys(state.downloads).length + state.localDownloadingModels.size
+    // Deduplicate: localDownloadingModels that also have progress entries
+    const overlap = Array.from(state.localDownloadingModels).filter((id) => state.downloads[id]).length
+    return modelDownloads - overlap
+  })
+
   useEffect(() => {
     isOpenClawRunning().then(setOpenClawRunning)
   }, [setOpenClawRunning])
@@ -159,8 +167,8 @@ export function NavMain() {
     }
   ).filter((item) => item.title !== 'common:newAgentChat' || openClawAvailable)
 
-  const handleCreateProject = async (name: string, assistantId?: string) => {
-    const newProject = await addFolder(name, assistantId)
+  const handleCreateProject = async (name: string, assistantId?: string, color?: string) => {
+    const newProject = await addFolder(name, assistantId, color)
     setProjectDialogOpen(false)
     navigate({
       to: '/project/$projectId',
@@ -183,6 +191,7 @@ export function NavMain() {
           }
 
           const Icon = item.icon
+          const isHub = item.title === 'common:hub'
           return (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
@@ -192,7 +201,14 @@ export function NavMain() {
               >
                 {item.url ? (
                   <Link to={item.url}>
-                    {Icon && <Icon className="text-foreground/70" />}
+                    {Icon && (
+                      <span className="relative">
+                        <Icon className="text-foreground/70" />
+                        {isHub && downloadCount > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary animate-pulse" />
+                        )}
+                      </span>
+                    )}
                     <span>{t(item.title)}</span>
                     {item.shortcut}
                   </Link>

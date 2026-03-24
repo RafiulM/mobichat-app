@@ -131,9 +131,15 @@ export class NativeSpeechRecognitionService {
         language: options.language ?? 'en-US',
       })
     } catch (err) {
-      // restart failed — fall back to full start
+      // restart failed — fall back to full start only if we haven't been
+      // cancelled concurrently (e.g., by cancelKeepEngine during navigation)
       this.starting = false
       this.engineAlive = false
+      if (this.state !== 'listening') {
+        // A concurrent cancel reset state — don't fall back, another effect
+        // will handle restarting if needed.
+        return
+      }
       this.cleanup()
       return this.start(options)
     } finally {
@@ -155,13 +161,13 @@ export class NativeSpeechRecognitionService {
 
   /**
    * Stop recognition and submit the accumulated partial transcript
-   * immediately — like MobiChat's stopListening(). Called by the silence
+   * immediately — like MacLLMs's stopListening(). Called by the silence
    * timer. Does not wait for isFinal from the Speech framework.
    */
   private submitAndStop(): void {
     this.clearSilenceTimer()
 
-    // Submit accumulated transcript immediately (MobiChat pattern)
+    // Submit accumulated transcript immediately (MacLLMs pattern)
     const text = this.lastTranscript
     this.lastTranscript = ''
     if (text.trim() && !this.submittedThisSession) {
@@ -197,6 +203,25 @@ export class NativeSpeechRecognitionService {
       console.error('[NativeSTT] cancel error:', err)
     })
     this.cleanup()
+  }
+
+  /**
+   * Cancel the current recognition session but keep the audio engine alive.
+   * Used during route transitions (component unmount / thread change) so that
+   * restart() can reuse the engine without creating a new AVAudioEngine and
+   * without triggering a new macOS microphone access event.
+   */
+  cancelKeepEngine(): void {
+    this.clearSilenceTimer()
+    this.clearFallbackTimer()
+    this.state = 'idle'
+    this.starting = false
+    this.lastTranscript = ''
+    this.submittedThisSession = false
+    invoke('plugin:tts|cancel_native_stt_keep_engine').catch((err) => {
+      console.error('[NativeSTT] cancelKeepEngine error:', err)
+    })
+    // Keep engineAlive = true and listeners intact for restart
   }
 
   private resetSilenceTimer(): void {

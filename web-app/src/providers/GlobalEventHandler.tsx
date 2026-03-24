@@ -4,6 +4,7 @@ import { useModelProvider } from '@/hooks/useModelProvider'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useHardware } from '@/hooks/useHardware'
 import { isPlatformTauri } from '@/lib/platform/utils'
+import { useDownloadEventListeners } from '@/hooks/useDownloadEventListeners'
 
 /**
  * GlobalEventHandler handles global events that should be processed across all screens
@@ -13,6 +14,10 @@ export function GlobalEventHandler() {
   const { setProviders } = useModelProvider()
   const serviceHub = useServiceHub()
   const setHardwareData = useHardware((state) => state.setHardwareData)
+
+  // Register download event listeners globally so they are always active
+  // regardless of sidebar state or current screen
+  useDownloadEventListeners()
 
   // Re-detect GPU when app becomes visible again (e.g. after system sleep on Linux - #6447)
   useEffect(() => {

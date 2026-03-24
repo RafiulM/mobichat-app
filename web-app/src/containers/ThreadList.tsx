@@ -29,6 +29,28 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ThreadMessage } from '@janhq/core'
 
+function getRelativeTime(timestamp: number | undefined): string {
+  if (!timestamp) return ''
+  // Normalize to milliseconds — timestamps under 1e12 are in seconds
+  const ms = timestamp < 1e12 ? timestamp * 1000 : timestamp
+  const now = Date.now()
+  const diff = now - ms
+  const seconds = Math.floor(diff / 1000)
+  if (seconds < 60) return 'now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5) return `${weeks}w`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo`
+  const years = Math.floor(days / 365)
+  return `${years}y`
+}
+
 const ThreadItem = memo(
   ({
     thread,
@@ -148,7 +170,8 @@ const ThreadItem = memo(
           : 
           <SidebarMenuButton asChild>
             <Link to="/threads/$threadId" params={{ threadId: thread.id }}>
-              <span className="text-[13px]">{thread.title || t('common:newThread')}</span>
+              <span className="text-[13px] truncate flex-1">{thread.title || t('common:newThread')}</span>
+              <span className="text-[11px] text-muted-foreground shrink-0">{getRelativeTime(thread.updated)}</span>
             </Link>
           </SidebarMenuButton>
         }

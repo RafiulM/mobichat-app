@@ -5,7 +5,7 @@ import { localStorageKey } from '@/constants/localStorage'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEffect, useMemo, useCallback, useState, useRef } from 'react'
-import { AppEvent, DownloadEvent, DownloadState, events } from '@janhq/core'
+import { AppEvent, events } from '@janhq/core'
 import { cn, formatMegaBytes } from '@/lib/utils'
 import { useHardware } from '@/hooks/useHardware'
 import { useModelSources } from '@/hooks/useModelSources'
@@ -97,8 +97,6 @@ function SetupScreen({
     downloads,
     localDownloadingModels,
     addLocalDownloadingModel,
-    updateProgress,
-    removeDownload,
     removeLocalDownloadingModel,
   } = useDownloadStore()
   const serviceHub = useServiceHub()
@@ -317,11 +315,15 @@ function SetupScreen({
           huggingfaceToken,
           true
         )
+        .catch(() => {
+          removeLocalDownloadingModel(variant.model_id)
+        })
     }
     setCurrentStep('done')
   }, [
     selectedModelDetails,
     addLocalDownloadingModel,
+    removeLocalDownloadingModel,
     serviceHub,
     huggingfaceToken,
   ])
@@ -367,44 +369,6 @@ function SetupScreen({
       events.off(AppEvent.onModelImported, onModelImported)
     }
   }, [serviceHub, setProviders])
-
-  // Listen for download progress events (DownloadManagement is not mounted during setup)
-  useEffect(() => {
-    const onFileDownloadUpdate = (state: DownloadState) => {
-      updateProgress(
-        state.modelId,
-        state.percent,
-        state.modelId,
-        state.size?.transferred,
-        state.size?.total
-      )
-    }
-
-    const onFileDownloadDone = (state: DownloadState) => {
-      removeDownload(state.modelId)
-      removeLocalDownloadingModel(state.modelId)
-    }
-
-    events.on(DownloadEvent.onFileDownloadUpdate, onFileDownloadUpdate)
-    events.on(DownloadEvent.onFileDownloadError, onFileDownloadDone)
-    events.on(DownloadEvent.onFileDownloadSuccess, onFileDownloadDone)
-    events.on(DownloadEvent.onFileDownloadStopped, onFileDownloadDone)
-    events.on(
-      DownloadEvent.onFileDownloadAndVerificationSuccess,
-      onFileDownloadDone
-    )
-
-    return () => {
-      events.off(DownloadEvent.onFileDownloadUpdate, onFileDownloadUpdate)
-      events.off(DownloadEvent.onFileDownloadError, onFileDownloadDone)
-      events.off(DownloadEvent.onFileDownloadSuccess, onFileDownloadDone)
-      events.off(DownloadEvent.onFileDownloadStopped, onFileDownloadDone)
-      events.off(
-        DownloadEvent.onFileDownloadAndVerificationSuccess,
-        onFileDownloadDone
-      )
-    }
-  }, [updateProgress, removeDownload, removeLocalDownloadingModel])
 
   // Finish setup and navigate home
   const finishSetup = useCallback(() => {
@@ -565,11 +529,11 @@ function SetupScreen({
           ))}
         </div>
 
-        {/* Skip setup */}
+        {/* Skip setup — z-30 to sit above the Tauri drag region (z-20) */}
         {currentStep !== 'done' && (
           <button
             onClick={skipSetup}
-            className="absolute right-6 text-[13px] text-[#6E6E7A] hover:text-white transition-colors cursor-pointer"
+            className="absolute right-6 z-30 text-[13px] text-[#6E6E7A] hover:text-white transition-colors cursor-pointer"
           >
             Skip setup
           </button>
@@ -1010,8 +974,8 @@ function DoneStep({
         </h1>
         <p className="text-[15px] text-[#6E6E7A]">
           {allDownloadsComplete
-            ? 'Your models are ready. Start chatting now.'
-            : 'Your models are downloading in the background. Start chatting now.'}
+            ? 'Your models are ready.'
+            : 'Your models are downloading in the background.'}
         </p>
       </div>
 
@@ -1101,7 +1065,7 @@ function DoneStep({
           (e.currentTarget.style.backgroundColor = '#865EEA')
         }
       >
-        Start chatting
+        Get started
       </button>
     </div>
   )

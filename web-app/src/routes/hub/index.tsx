@@ -27,6 +27,7 @@ import {
 import { useServiceHub } from '@/hooks/useServiceHub'
 import type { CatalogModel } from '@/services/models/types'
 import HeaderPage from '@/containers/HeaderPage'
+import { DownloadManagement } from '@/containers/DownloadManegement'
 import { ChevronsUpDown, Loader } from 'lucide-react'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import Fuse from 'fuse.js'
@@ -407,6 +408,7 @@ function HubContent() {
               />
             </div>
             <div className="sm:flex items-center gap-2 shrink-0 hidden">
+              <DownloadManagement />
               {renderFilter()}
             </div>
           </div>

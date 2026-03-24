@@ -55,8 +55,18 @@ const AppLayout = () => {
     () => localStorage.getItem(localStorageKey.setupCompleted) === 'true'
   )
 
+  // DEV: call window.showOnboarding() in DevTools to open the setup screen anytime
+  const [forceSetup, setForceSetup] = useState(
+    () => new URLSearchParams(window.location.search).get('setup') === 'true'
+  )
+  useEffect(() => {
+    ;(window as any).showOnboarding = () => setForceSetup(true)
+    return () => { delete (window as any).showOnboarding }
+  }, [])
+
   const handleSetupComplete = useCallback(() => {
     setSetupCompleted(true)
+    setForceSetup(false)
   }, [])
 
   // Check if user has any valid providers (same logic as useJanModelPrompt)
@@ -74,7 +84,7 @@ const AppLayout = () => {
     )
   })
 
-  const showSetupScreen = !setupCompleted && !hasValidProviders
+  const showSetupScreen = forceSetup || (!setupCompleted && !hasValidProviders)
 
   if (showSetupScreen) {
     return (
